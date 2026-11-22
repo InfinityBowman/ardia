@@ -160,7 +160,7 @@ private struct SyncInvitation: View {
         .font(.headline)
         .foregroundStyle(TabsPalette.headerText)
         .padding(.horizontal, 20)
-        .frame(minHeight: TabsLayout.barCircle)
+        .frame(minHeight: TabsLayout.glassCircle)
         .contentShape(.capsule)
         .chromeSurface(in: .capsule)
     }

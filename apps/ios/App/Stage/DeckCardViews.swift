@@ -8,6 +8,7 @@ final class DeckCardView: UIView {
   private let content = UIView()
   private let imageView = UIImageView()
   private let placeholder = DeckCardPlaceholderView()
+  private let shade = UIView()
   private var liveSnapshot: UIView?
   private(set) var hasImage = false
 
@@ -24,8 +25,12 @@ final class DeckCardView: UIView {
     content.layer.borderColor = UIColor(TabsPalette.cardEdge).cgColor
     content.layer.borderWidth = 0.5
     imageView.contentMode = .scaleToFill
+    shade.backgroundColor = .black
+    shade.alpha = 0
+    shade.isUserInteractionEnabled = false
     content.addSubview(placeholder)
     content.addSubview(imageView)
+    content.addSubview(shade)
     addSubview(content)
     isAccessibilityElement = true
     accessibilityTraits = .button
@@ -41,6 +46,7 @@ final class DeckCardView: UIView {
     self.transform = transform
     content.frame = bounds
     placeholder.frame = bounds
+    shade.frame = bounds
     layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: TabsLayout.cardRadius).cgPath
     layoutImage()
     layoutLive()
@@ -80,7 +86,7 @@ final class DeckCardView: UIView {
     if let snapshot {
       snapshot.layer.anchorPoint = .zero
       snapshot.isUserInteractionEnabled = false
-      content.addSubview(snapshot)
+      content.insertSubview(snapshot, belowSubview: shade)
     }
     placeholder.isHidden = hasImage || snapshot != nil
     layoutLive()
@@ -92,6 +98,11 @@ final class DeckCardView: UIView {
     content.layer.cornerRadius = radius
     content.layer.borderWidth = edge
   }
+
+  func setDim(_ amount: CGFloat) {
+    if shade.alpha != amount { shade.alpha = amount }
+  }
+
 
   private func layoutImage() {
     guard let image = imageView.image, image.size.width > 0 else { return }
@@ -117,6 +128,9 @@ final class DeckCardHeaderView: UIView {
   private let label = UILabel()
   private var iconKey = ""
 
+  static let titleHiddenRoom: CGFloat = 40
+  static let titleRevealSpan: CGFloat = 30
+
   override init(frame: CGRect) {
     icon = UIHostingController(rootView: AnyView(EmptyView()))
     super.init(frame: frame)
@@ -124,8 +138,8 @@ final class DeckCardHeaderView: UIView {
     icon.view.isUserInteractionEnabled = false
     icon.view.frame = CGRect(x: 0, y: 0, width: TabsLayout.faviconSize, height: TabsLayout.faviconSize)
     if #available(iOS 16.4, *) { icon.safeAreaRegions = [] }
-    label.font = UIFontMetrics(forTextStyle: .footnote).scaledFont(for: .systemFont(ofSize: 13, weight: .medium), maximumPointSize: 22)
-    label.textColor = UIColor(TabsPalette.headerText)
+    label.font = UIFontMetrics(forTextStyle: .footnote).scaledFont(for: .systemFont(ofSize: 12.5, weight: .medium), maximumPointSize: 20)
+    label.textColor = .white
     label.lineBreakMode = .byTruncatingTail
     addSubview(icon.view)
     addSubview(label)
@@ -146,15 +160,17 @@ final class DeckCardHeaderView: UIView {
     }
   }
 
-  func layout(width available: CGFloat) {
+  func layout(width available: CGFloat, scale: CGFloat) {
     let iconSize = TabsLayout.faviconSize
-    let reveal = DeckHeaderMetrics.titleReveal(width: available)
-    let titleWidth = min(label.intrinsicContentSize.width, max(available - iconSize - TabsLayout.headerSpacing, 0))
-    let leading: CGFloat = 2
+    let leading = TabsDeckGeometry.headerInset * scale
+    let titleLeading = leading + iconSize + TabsLayout.headerSpacing
+    let room = available - titleLeading
+    let reveal = min(max((room - Self.titleHiddenRoom) / Self.titleRevealSpan, 0), 1)
+    let titleWidth = min(label.intrinsicContentSize.width, max(room, 0))
     let height = bounds.height
     icon.view.frame = CGRect(x: leading, y: (height - iconSize) / 2, width: iconSize, height: iconSize)
-    icon.view.alpha = DeckHeaderMetrics.iconReveal(width: available, icon: iconSize)
-    label.frame = CGRect(x: leading + iconSize + TabsLayout.headerSpacing, y: 0, width: titleWidth, height: height)
+    icon.view.alpha = DeckHeaderMetrics.iconReveal(width: available - leading, icon: iconSize)
+    label.frame = CGRect(x: titleLeading, y: 0, width: titleWidth, height: height)
     label.alpha = reveal
   }
 }

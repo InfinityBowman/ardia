@@ -36,7 +36,9 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
   private var cards: [UUID: DeckCardView] = [:]
   private var headers: [UUID: DeckCardHeaderView] = [:]
   private var lifts: [UUID: CGFloat] = [:]
-  private var transition: UIViewPropertyAnimator?
+  private var transitions: [UIViewPropertyAnimator] = []
+  private var transitionGeneration = 0
+  private var headerTucks: [UUID: CGFloat] = [:]
   private var geometry: TabsDeckGeometry { stage.geometry }
   private var shownSpace: String?
   private var observing = false
@@ -126,13 +128,13 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
 
   private func updateGeometry() {
     let insets = view.window?.safeAreaInsets ?? view.safeAreaInsets
-    let chrome = stage.isShowingArchiveCard && !app.deck.isGrid ? TabsLayout.archiveCardBottom : TabsLayout.headerBottom
+    let reserve = stage.isShowingArchiveCard && !app.deck.isGrid ? TabsLayout.archiveCardHeight + DeckStageModel.archiveCardGap : 0
     let next = TabsDeckGeometry(
       container: view.bounds.size,
       safeTop: insets.top,
       safeBottom: insets.bottom,
       safeSide: max(insets.left, insets.right),
-      chromeBottom: insets.top + chrome
+      reserveAboveBar: reserve
     )
     guard next != stage.geometry, next.container.width > 0 else { return }
     stage.geometry = next
@@ -177,6 +179,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     updateGeometry()
     setPageBar(false)
     stage.set(\.query, "")
+    stage.set(\.isSearching, false)
     shownSpace = app.currentSpace?.syncId
     stage.set(\.isShowingArchiveCard, app.deck.shouldOfferArchiveCard(openTabs: app.deckTabs.count))
     updateGeometry()
@@ -223,18 +226,46 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       layoutCards(progress: 0)
       setChrome(alpha: 0, backdrop: 0)
     }
-    let animator = UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: 0.26))
-    animator.isUserInteractionEnabled = true
-    animator.isInterruptible = true
-    animator.addAnimations { self.layoutCards(progress: 1); self.backdrop.view.alpha = 1 }
-    animator.addAnimations({ self.topChromeShell.alpha = 1; self.layoutHeaders(alpha: 1) }, delayFactor: 0.45)
-    animator.addCompletion { [weak self] position in
-      guard let self, case .opening = self.phase else { return }
-      if position == .end { self.settled() }
-    }
-    transition = animator
-    animator.startAnimation()
+    runOpen(headersDelayed: true)
     commitNow()
+  }
+
+  private func runOpen(headersDelayed: Bool) {
+    let generation = beginTransitions()
+    let main = UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: Self.openResponse))
+    main.isUserInteractionEnabled = true
+    main.isInterruptible = true
+    main.addAnimations {
+      self.layoutCards(progress: 1) { $0 != .launcher }
+      self.backdrop.view.alpha = 1
+    }
+    let chrome = { self.topChromeShell.alpha = 1; self.layoutHeaders(alpha: 1) }
+    if headersDelayed {
+      main.addAnimations(chrome, delayFactor: 0.45)
+    } else {
+      main.addAnimations(chrome)
+    }
+    let fly = UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: Self.flyResponse))
+    fly.isUserInteractionEnabled = true
+    fly.isInterruptible = true
+    fly.addAnimations { self.layoutCards(progress: 1) { $0 == .launcher } }
+    var pending = 2
+    for animator in [main, fly] {
+      animator.addCompletion { [weak self] position in
+        guard let self, generation == self.transitionGeneration, position == .end else { return }
+        pending -= 1
+        guard pending == 0, case .opening = self.phase else { return }
+        self.transitions = []
+        self.settled()
+      }
+      transitions.append(animator)
+      animator.startAnimation()
+    }
+  }
+
+  private func beginTransitions() -> Int {
+    transitionGeneration += 1
+    return transitionGeneration
   }
 
   private var pendingThumbnail: (webView: WKWebView, id: UUID)?
@@ -286,24 +317,12 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     stopTransition()
     phase = .opening(id)
     setPageBar(false)
-    let animator = UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: 0.26))
-    animator.isInterruptible = true
-    animator.addAnimations {
-      self.layoutCards(progress: 1)
-      self.backdrop.view.alpha = 1
-      self.topChromeShell.alpha = 1
-      self.layoutHeaders(alpha: 1)
-    }
-    animator.addCompletion { [weak self] position in
-      guard let self, case .opening = self.phase, position == .end else { return }
-      self.settled()
-    }
-    transition = animator
-    animator.startAnimation()
+    runOpen(headersDelayed: false)
     commitNow()
   }
 
   private func runHome(to id: UUID, duration: TimeInterval) {
+    let generation = beginTransitions()
     let animator = UIViewPropertyAnimator(duration: duration, timingParameters: Self.landing)
     animator.isInterruptible = true
     animator.addAnimations {
@@ -313,16 +332,19 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       self.layoutHeaders(alpha: 0)
     }
     animator.addCompletion { [weak self] position in
-      guard let self, position == .end else { return }
+      guard let self, generation == self.transitionGeneration, position == .end else { return }
+      self.transitions = []
       switch self.phase {
       case .closing(id), .returning(id): self.finishClosing(on: id)
       default: break
       }
     }
-    transition = animator
+    transitions = [animator]
     animator.startAnimation()
   }
 
+  private static let openResponse: Double = 0.26
+  private static let flyResponse: Double = 0.26
   private static let landingDuration: TimeInterval = 0.34
   private static let returnDuration: TimeInterval = 0.28
   private static let landing = UICubicTimingParameters(controlPoint1: CGPoint(x: 0.2, y: 0.8), controlPoint2: CGPoint(x: 0.2, y: 1))
@@ -353,9 +375,11 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
   }
 
   private func stopTransition() {
-    guard let animator = transition else { return }
-    transition = nil
-    if animator.state == .active {
+    guard !transitions.isEmpty else { return }
+    let running = transitions
+    transitions = []
+    transitionGeneration += 1
+    for animator in running where animator.state == .active {
       animator.stopAnimation(false)
       animator.finishAnimation(at: .current)
     }
@@ -438,42 +462,83 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     }
   }
 
+  private struct LaunchAnchor {
+    var expandedIndex: Int?
+    var previous: UUID?
+  }
+
+  private var launchAnchor: LaunchAnchor {
+    switch phase {
+    case .opening(let expanded?), .returning(let expanded):
+      return LaunchAnchor(expandedIndex: order.firstIndex(of: expanded))
+    case .closing(let expanded):
+      return LaunchAnchor(previous: order.last { $0 != expanded })
+    default:
+      return LaunchAnchor()
+    }
+  }
+
+  private func launchDepth(for id: UUID, at index: Int, anchor: LaunchAnchor) -> Int {
+    switch phase {
+    case .opening, .returning:
+      guard let expandedIndex = anchor.expandedIndex else { return 1 }
+      return max(expandedIndex - 1 - index, 0)
+    case .closing:
+      return id == anchor.previous ? 0 : 1
+    default:
+      return 0
+    }
+  }
+
   private func launchRole(for id: UUID, at index: Int, expanded: UUID?) -> DeckRole {
     guard let expanded, let expandedIndex = order.firstIndex(of: expanded) else { return .stay }
     if id == expanded { return .expanded }
     return index < expandedIndex ? .launcher : .slideRight
   }
 
-  private func layoutCards(progress: Double = 1) {
+  private func layoutCards(progress: Double = 1, only include: ((DeckRole) -> Bool)? = nil) {
     let range = TabsDeckGeometry.renderedRange(around: scroll, count: order.count)
+    let end = TabsDeckGeometry.endBlend(scroll: scroll, count: order.count)
+    let screenWidth = geometry.container.width
+    let anchor = launchAnchor
     for (index, id) in order.enumerated() {
       guard let card = cards[id], let header = headers[id] else { continue }
       let role = role(for: id, at: index)
+      if let include, !include(role) { continue }
       let visible = range.contains(index) || role == .expanded
       card.isHidden = !visible
       header.isHidden = !visible
       guard visible else { continue }
-      let motion = DeckMotion(relative: Double(index) - scroll, scaleProgress: progress, positionProgress: progress, lift: Double(lifts[id] ?? 0), vanish: 0)
-      let pose = DeckPose.resolve(motion, role: role, geometry: geometry, isLast: index == order.count - 1, tilt: tilt(at: index))
+      let relative = Double(index) - scroll
+      let motion = DeckMotion(relative: relative, scaleProgress: progress, positionProgress: progress, lift: Double(lifts[id] ?? 0), vanish: 0)
+      let depth = role == .launcher ? launchDepth(for: id, at: index, anchor: anchor) : 0
+      let pose = DeckPose.resolve(motion, role: role, geometry: geometry, isLast: index == order.count - 1, end: end, launchDepth: depth)
       card.center = pose.center
       card.transform = CGAffineTransform(rotationAngle: pose.rotation).scaledBy(x: pose.scale, y: pose.scale)
       card.setCorner(pose.corner / max(pose.scale, 0.01), edge: 0.5 / max(pose.scale, 0.01))
+      card.setDim(pose.dim)
       card.alpha = pose.opacity
       let expanded = role == .expanded ? 100_000.0 : (role == .launcher && isLanding ? 200_000.0 : 0)
       card.layer.zPosition = CGFloat(Double(index) * 2 + expanded)
       header.layer.zPosition = CGFloat(Double(index) * 2 + 1 + expanded)
-      let width = max(pose.visibleWidth - 8, 0)
       let cardHeight = geometry.cardSize.height * pose.scale
       let cardWidth = geometry.cardSize.width * pose.scale
+      let left = pose.center.x - cardWidth / 2
+      let width = max(min(pose.visibleWidth, screenWidth - left) - 8, 0)
       header.frame = CGRect(
-        x: pose.center.x - cardWidth / 2,
-        y: pose.center.y - cardHeight / 2 - TabsLayout.headerGap - TabsDeckGeometry.headerHeight,
+        x: left,
+        y: pose.center.y - cardHeight / 2 - TabsDeckGeometry.headerAboveCard * pose.scale,
         width: width,
         height: TabsDeckGeometry.headerHeight
       )
-      header.layout(width: width)
-      if phase == .settled { header.alpha = max(0, 1 + (lifts[id] ?? 0) / 120) }
+      header.layout(width: width, scale: pose.scale)
+      headerTucks[id] = 1 - (1 - TabsPalette.tuckedHeaderOpacity) * min(max(-relative, 0), 1)
+      if phase == .settled { header.alpha = headerAlpha(for: id) }
     }
+  }
+
+  private func headerAlpha(for id: UUID) -> CGFloat {
+    max(0, 1 + (lifts[id] ?? 0) / 120) * (headerTucks[id] ?? 1)
   }
 
   private var isLanding: Bool {
@@ -483,12 +548,8 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     }
   }
 
-  private func tilt(at index: Int) -> CGFloat {
-    index % 2 == 0 ? -0.2 : -0.07
-  }
-
   private func layoutHeaders(alpha: CGFloat) {
-    for (id, header) in headers { header.alpha = alpha * max(0, 1 + (lifts[id] ?? 0) / 120) }
+    for (id, header) in headers { header.alpha = alpha * headerAlpha(for: id) }
   }
 
   private func rootClaim(_ point: CGPoint, event: UIEvent?) -> TouchClaim {
@@ -533,18 +594,17 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
 
   private func topChromeTakes(_ point: CGPoint) -> Bool {
     if stage.isEmpty { return true }
-    let chrome = stage.isShowingArchiveCard ? TabsLayout.archiveCardBottom : TabsLayout.headerBottom
-    return point.y < geometry.safeTop + chrome
+    guard stage.isShowingArchiveCard, !app.deck.isGrid else { return false }
+    let center = DeckStageModel.archiveCardCenterY(geometry)
+    return abs(point.y - center) <= TabsLayout.archiveCardHeight / 2 + 4
   }
 
   private func barTakes(_ point: CGPoint) -> Bool {
-    point.y >= barTop - 8
+    point.y >= barTop
   }
 
   private var barTop: CGFloat {
-    let overlap = stage.keyboardOverlap
-    let center = overlap > 0 ? geometry.container.height - overlap - TabsLayout.barGap - TabsLayout.barCircle / 2 : geometry.barCenterY
-    return center - TabsLayout.barCircle / 2
+    DeckStageModel.barCenterY(geometry, keyboardOverlap: stage.keyboardOverlap) - TabsLayout.barHitTarget / 2 - 4
   }
 
   private func setVisible(_ visible: Bool) {
@@ -605,7 +665,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
 
   private func isOnPageTabsButton(_ point: CGPoint) -> Bool {
     let leading = view.effectiveUserInterfaceLayoutDirection == .rightToLeft ? view.bounds.width - point.x : point.x
-    return point.y >= barTop - 16 && leading <= geometry.safeSide + TabsLayout.barSideInset + TabsLayout.barCircle + 28
+    return point.y >= barTop - 12 && leading <= geometry.safeSide + 80
   }
 
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
@@ -677,10 +737,10 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       case .lift(let id, _):
         if TabsDeckGeometry.shouldClose(translation: translation.y, velocity: velocity.y, cardHeight: geometry.cardSize.height) {
           impact.impactOccurred()
-          close(id, animated: true)
+          close(id, animated: true, velocity: velocity.y)
         } else {
           lifts[id] = nil
-          UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: 0.3)).run { self.layoutCards() }
+          UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: Self.liftReturnResponse)).run { self.layoutCards() }
         }
       case nil:
         break
@@ -725,7 +785,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     settle = nil
   }
 
-  private func close(_ id: UUID, animated: Bool) {
+  private func close(_ id: UUID, animated: Bool, velocity: CGFloat = 0) {
     guard order.contains(id) else { return }
     let remove = { [weak self] in
       guard let self, let index = self.order.firstIndex(of: id) else { return }
@@ -737,6 +797,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       self.cards[id] = nil
       self.headers[id] = nil
       self.lifts[id] = nil
+      self.headerTucks[id] = nil
       self.stage.isEmpty = self.order.isEmpty
       UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: 0.36)).run { self.layoutCards() }
       self.app.closeTab(id)
@@ -753,6 +814,8 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       self.headers[id]?.alpha = 0
     } completion: { _ in remove() }
   }
+
+  private static let liftReturnResponse: Double = 0.3
 
   private func observeModel() {
     guard !observing else { return }

@@ -6,20 +6,40 @@ struct TabsDeckGeometryTests {
   let geometry = TabsDeckGeometry(container: CGSize(width: 393, height: 852), safeTop: 59, safeBottom: 34)
 
   @Test func `resting deck matches Arc's measured slots`() {
-    let proMax = TabsDeckGeometry(container: CGSize(width: 440, height: 956), safeTop: 62, safeBottom: 34)
-    #expect(abs(proMax.cardSize.width - 306) < 0.5)
-    #expect(abs(proMax.leading(at: 0) - 66) < 0.5)
-    #expect(abs(proMax.leading(at: 1) - 284) < 0.5)
-    #expect(abs(geometry.leading(at: -1) - 6) < 0.5)
-    #expect(abs(geometry.barCenterY - 807) < 0.5)
+    let arc = TabsDeckGeometry(container: CGSize(width: 401, height: 878), safeTop: 0, safeBottom: 0)
+    #expect(abs(arc.cardSize.width - 281) < 0.5)
+    #expect(abs(arc.leading(at: 0) - 84) < 0.5)
+    #expect(abs(arc.leading(at: 1) - 308) < 0.5)
+    #expect(abs(arc.leading(at: -1) - 13) < 0.5)
+    #expect(abs(arc.leading(at: -2) - 0) < 1)
+    #expect(abs(arc.scale(at: -1) - 0.97) < 0.005)
+    #expect(abs(arc.scale(at: -2) - 0.92) < 0.005)
+    #expect(abs(arc.cardCenterY - 439) < 0.5)
+    #expect(abs(arc.barCenterY - 849.5) < 0.5)
   }
 
-  @Test func `the deck's header and archive card push the cards down`() {
-    let bare = TabsDeckGeometry(container: CGSize(width: 402, height: 874), safeTop: 62, safeBottom: 34, chromeBottom: 110)
-    let withCard = TabsDeckGeometry(container: CGSize(width: 402, height: 874), safeTop: 62, safeBottom: 34, chromeBottom: 161.5)
-    #expect(abs(bare.cardCenterY - bare.cardSize.height / 2 - 170) < 1.5)
-    #expect(abs(withCard.cardCenterY - withCard.cardSize.height / 2 - 202.5) < 1.5)
-    #expect(withCard.cardSize.height < bare.cardSize.height)
+  @Test func `the newest card is centred at the end of the deck`() {
+    let arc = TabsDeckGeometry(container: CGSize(width: 401, height: 878), safeTop: 0, safeBottom: 0)
+    let end = TabsDeckGeometry.endBlend(scroll: 4, count: 5)
+    #expect(end == 1)
+    #expect(abs(arc.leading(at: 0, end: end) - 60) < 0.5)
+    #expect(abs(arc.leading(at: -1, end: end) - 13) < 0.5)
+    #expect(TabsDeckGeometry.endBlend(scroll: 3, count: 5) == 0)
+    #expect(TabsDeckGeometry.endBlend(scroll: 0, count: 1) == 1)
+  }
+
+  @Test func `the bar sits above the home indicator`() {
+    let phone = TabsDeckGeometry(container: CGSize(width: 402, height: 874), safeTop: 62, safeBottom: 34)
+    #expect(abs(phone.barCenterY - 811.5) < 0.5)
+    #expect(phone.cardCenterY + phone.cardSize.height / 2 < phone.barCenterY - TabsDeckGeometry.barCircle / 2)
+    #expect(phone.cardCenterY - phone.cardSize.height / 2 - TabsDeckGeometry.headerAboveCard >= phone.safeTop)
+  }
+
+  @Test func `the archive card above the bar lifts the cards`() {
+    let bare = TabsDeckGeometry(container: CGSize(width: 402, height: 874), safeTop: 62, safeBottom: 34)
+    let withCard = TabsDeckGeometry(container: CGSize(width: 402, height: 874), safeTop: 62, safeBottom: 34, reserveAboveBar: 51)
+    #expect(withCard.cardCenterY + withCard.cardSize.height / 2 <= bare.barCenterY - TabsDeckGeometry.barCircle / 2 - 16 - 51 + 0.5)
+    #expect(withCard.cardCenterY < bare.cardCenterY)
   }
 
   @Test func `the next card overlaps the focused one`() {
@@ -33,14 +53,19 @@ struct TabsDeckGeometryTests {
     #expect(abs(leftSlope - rightSlope) / rightSlope < 0.01)
   }
 
-  @Test func `tucked cards stay on screen and keep their order`() {
-    let positions = stride(from: -8.0, through: 0, by: 0.5).map { geometry.leading(at: $0) }
-    #expect(positions.allSatisfy { $0 >= 0 })
-    #expect(zip(positions, positions.dropFirst()).allSatisfy { $0 < $1 })
+  @Test func `tucked cards stay near the edge and keep their order`() {
+    for end in [CGFloat(0), 0.5, 1] {
+      let positions = stride(from: -8.0, through: 1, by: 0.05).map { geometry.leading(at: $0, end: end) }
+      #expect(positions.allSatisfy { $0 >= -geometry.container.width * 0.03 })
+      #expect(zip(positions, positions.dropFirst()).allSatisfy { $0 < $1 })
+    }
+    let scales = stride(from: -8.0, through: 0, by: 0.5).map { geometry.scale(at: $0) }
+    #expect(zip(scales, scales.dropFirst()).allSatisfy { $0 <= $1 })
   }
 
   @Test func `a mostly covered card shows only its favicon`() {
     #expect(geometry.visibleWidth(at: -1, isLast: false) < TabsDeckGeometry.headerFaviconOnlyWidth)
+    #expect(geometry.visibleWidth(at: -1, isLast: false, end: 1) < TabsDeckGeometry.headerFaviconOnlyWidth)
     #expect(abs(geometry.visibleWidth(at: 0, isLast: false) - geometry.spacing) < 0.5)
     #expect(geometry.visibleWidth(at: 0, isLast: true) == geometry.cardSize.width)
   }
@@ -77,7 +102,7 @@ struct TabsDeckGeometryTests {
     let landscape = TabsDeckGeometry(container: CGSize(width: 852, height: 393), safeTop: 0, safeBottom: 21)
     let top = landscape.cardCenterY - landscape.cardSize.height / 2
     let bottom = landscape.cardCenterY + landscape.cardSize.height / 2
-    #expect(top >= TabsDeckGeometry.headerHeight)
+    #expect(top >= TabsDeckGeometry.headerAboveCard)
     #expect(bottom < landscape.barCenterY - 20)
   }
 }

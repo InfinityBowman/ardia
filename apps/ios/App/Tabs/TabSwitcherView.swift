@@ -184,7 +184,7 @@ struct TabDeck: View {
         .opacity(chromeOpacity)
         .zIndex(Self.overlayLayer + 3)
       } else {
-        DeckBottomBar(
+        DeckSearchBottomBar(
           geometry: geometry,
           isGrid: app.deck.isGrid,
           query: $query,
@@ -272,7 +272,7 @@ struct TabDeck: View {
 
   private func barCenterY(_ geometry: TabsDeckGeometry) -> CGFloat {
     guard keyboardOverlap > 0 else { return geometry.barCenterY }
-    return geometry.container.height - keyboardOverlap - TabsLayout.barGap - TabsLayout.barCircle / 2
+    return geometry.container.height - keyboardOverlap - TabsLayout.barGap - TabsLayout.glassCircle / 2
   }
 
   private func grid(_ byID: [UUID: BrowserTab], geometry: TabsDeckGeometry) -> some View {
@@ -281,7 +281,7 @@ struct TabDeck: View {
       selectedID: app.tabs.selectedTabID,
       cardAspect: geometry.container.width / max(geometry.container.height, 1),
       topInset: geometry.safeTop + TabsLayout.headerBottom + 8,
-      bottomInset: geometry.container.height - geometry.barCenterY + TabsLayout.barCircle,
+      bottomInset: geometry.container.height - geometry.barCenterY + TabsLayout.glassCircle,
       sideInset: geometry.safeSide + TabsLayout.headerSide + 4,
       memoryImage: { app.deck.memoryImage(for: $0) },
       snapshots: app.web.snapshots,

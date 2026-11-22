@@ -16,6 +16,18 @@ final class DeckStageModel {
   var blurSearch = 0
   var gridScroll = 0
   var isPresented = false
+  var isSearching = false
+
+  static let archiveCardGap: CGFloat = 8
+
+  static func barCenterY(_ geometry: TabsDeckGeometry, keyboardOverlap: CGFloat) -> CGFloat {
+    guard keyboardOverlap > 0 else { return geometry.barCenterY }
+    return geometry.container.height - keyboardOverlap - TabsLayout.barGap - TabsLayout.barHitTarget / 2
+  }
+
+  static func archiveCardCenterY(_ geometry: TabsDeckGeometry) -> CGFloat {
+    geometry.barCenterY - TabsLayout.barCircle / 2 - archiveCardGap - TabsLayout.archiveCardHeight / 2
+  }
 
   func set<Value: Equatable>(_ key: ReferenceWritableKeyPath<DeckStageModel, Value>, _ value: Value) {
     if self[keyPath: key] != value { self[keyPath: key] = value }
@@ -59,15 +71,8 @@ struct DeckStageTopChrome: View {
         ArchiveIntervalCard(interval: Bindable(app.tabs).autoArchiveInterval) { stage.dismissArchiveCard() }
           .padding(.horizontal, geometry.safeSide + TabsLayout.headerSide)
           .frame(width: geometry.container.width)
-          .position(x: geometry.container.width / 2, y: geometry.safeTop + TabsLayout.archiveCardCenter)
+          .position(x: geometry.container.width / 2, y: DeckStageModel.archiveCardCenterY(geometry))
       }
-      DeckHeader(
-        geometry: geometry,
-        privateCount: app.tabs.privateTabs.count,
-        hasTabs: !app.deckTabs.isEmpty,
-        closeIncognito: { stage.isConfirmingCloseIncognito = true },
-        closeAll: { stage.isConfirmingCloseAll = true }
-      )
     }
     .frame(width: geometry.container.width, height: geometry.container.height)
     .accessibilityHidden(!stage.isPresented)
@@ -100,8 +105,8 @@ struct DeckStageGrid: View {
       tabs: gridTabs,
       selectedID: app.tabs.selectedTabID,
       cardAspect: geometry.container.width / max(geometry.container.height, 1),
-      topInset: geometry.safeTop + TabsLayout.headerBottom + 8,
-      bottomInset: geometry.container.height - geometry.barCenterY + TabsLayout.barCircle,
+      topInset: geometry.safeTop + 8,
+      bottomInset: geometry.container.height - geometry.barCenterY + TabsLayout.barHitTarget / 2 + 8,
       sideInset: geometry.safeSide + TabsLayout.headerSide + 4,
       memoryImage: { app.browse.covers.image(for: $0) },
       snapshots: app.web.snapshots,
@@ -122,6 +127,30 @@ struct DeckStageGrid: View {
 }
 
 struct DeckStageBar: View {
+  let stage: DeckStageModel
+
+  var body: some View {
+    DeckStageBarContent(stage: stage)
+      .accessibilityHidden(!stage.isPresented)
+  }
+}
+
+struct DeckSearchBlurDriver: View {
+  let stage: DeckStageModel
+  var focus: FocusState<Bool>.Binding
+
+  var body: some View {
+    Color.clear
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
+      .onChange(of: stage.blurSearch) {
+        focus.wrappedValue = false
+        if stage.query.isEmpty { stage.isSearching = false }
+      }
+  }
+}
+
+struct DeckStageBarContent: View {
   @Bindable var stage: DeckStageModel
   @Environment(AppModel.self) private var app
   @FocusState private var isSearchFocused: Bool
@@ -129,27 +158,54 @@ struct DeckStageBar: View {
   var body: some View {
     let geometry = stage.geometry
     ZStack(alignment: .bottom) {
-        DeckBottomBar(
-          geometry: geometry,
+      DeckBottomBar(
+        geometry: geometry,
+        isSearching: stage.isSearching,
+        query: $stage.query,
+        searchFocus: $isSearchFocused,
+        plus: PlusActions(
+          isIncognito: app.isIncognito,
+          canReopen: app.tabs.canReopenClosed,
+          newTab: { app.newTab() },
+          newRegularTab: { app.newRegularTab() },
+          newIncognitoTab: { app.newIncognitoTab() },
+          reopen: { app.reopenLastClosed() }
+        ),
+        options: DeckOptions(
           isGrid: app.deck.isGrid,
-          query: $stage.query,
-          searchFocus: $isSearchFocused,
-          plus: PlusActions(
-            isIncognito: app.isIncognito,
-            canReopen: app.tabs.canReopenClosed,
-            newTab: { app.newTab() },
-            newRegularTab: { app.newRegularTab() },
-            newIncognitoTab: { app.newIncognitoTab() },
-            reopen: { app.reopenLastClosed() }
-          ),
-          toggleGrid: stage.toggleGrid
+          hasTabs: !app.deckTabs.isEmpty,
+          privateCount: app.tabs.privateTabs.count,
+          spaces: app.spaces,
+          currentSpace: app.currentSpace?.syncId,
+          toggleGrid: stage.toggleGrid,
+          searchTabs: { stage.isSearching = true },
+          endSearch: {
+            stage.query = ""
+            isSearchFocused = false
+            stage.isSearching = false
+          },
+          openSynced: {
+            if app.sync.phase == .off {
+              app.sheet = .syncSetup
+            } else {
+              app.openSyncedSpaces()
+            }
+          },
+          switchSpace: { app.switchSpace(to: $0) },
+          openArchive: { app.openArchive() },
+          openSettings: { app.sheet = .settings },
+          closeIncognito: { stage.isConfirmingCloseIncognito = true },
+          closeAll: { stage.isConfirmingCloseAll = true }
         )
-        .frame(width: geometry.container.width)
-        .position(x: geometry.container.width / 2, y: barCenterY)
+      )
+      .frame(width: geometry.container.width)
+      .position(x: geometry.container.width / 2, y: DeckStageModel.barCenterY(geometry, keyboardOverlap: stage.keyboardOverlap))
     }
     .frame(width: geometry.container.width, height: geometry.container.height)
-    .accessibilityHidden(!stage.isPresented)
-    .onChange(of: stage.blurSearch) { isSearchFocused = false }
+    .background { DeckSearchBlurDriver(stage: stage, focus: $isSearchFocused) }
+    .onChange(of: stage.isSearching) { _, searching in
+      if searching { isSearchFocused = true }
+    }
     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
       guard let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
       withAnimation(.smooth(duration: 0.3)) { stage.keyboardOverlap = max(0, geometry.container.height - frame.minY) }
@@ -157,12 +213,6 @@ struct DeckStageBar: View {
     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
       withAnimation(.smooth(duration: 0.3)) { stage.keyboardOverlap = 0 }
     }
-  }
-
-  private var barCenterY: CGFloat {
-    let geometry = stage.geometry
-    guard stage.keyboardOverlap > 0 else { return geometry.barCenterY }
-    return geometry.container.height - stage.keyboardOverlap - TabsLayout.barGap - TabsLayout.barCircle / 2
   }
 }
 

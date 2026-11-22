@@ -299,10 +299,25 @@ def scenario_deck_grid(sim, cycles=3):
     if not tabs:
         sys.exit("no Tabs button on screen")
     x, y = tabs["x"], tabs["y"]
+    batch(sim, [f"tap -x {x:.0f} -y {y:.0f}", "sleep 1.2"])
+    toggle = find(sim, "Show as Grid")
+    if toggle:
+        grid = [f"tap -x {toggle['x']:.0f} -y {toggle['y']:.0f}"]
+    else:
+        gear = find(sim, "Settings")
+        if not gear:
+            sys.exit("no grid toggle and no Settings button in the switcher")
+        hold = f"touch -x {gear['x']:.0f} -y {gear['y']:.0f} --down --up --delay 0.7"
+        batch(sim, [hold, "sleep 0.8"])
+        item = find(sim, "Show as Grid")
+        if not item:
+            sys.exit("no Show as Grid item in the Settings button's menu")
+        grid = [hold, "sleep 0.4", f"tap -x {item['x']:.0f} -y {item['y']:.0f}"]
+        batch(sim, ["tap -x 200 -y 80", "sleep 0.6"])
+    batch(sim, ["tap -x 200 -y 450", "sleep 1.2"])
     steps = []
     for _ in range(cycles):
-        steps += [f"tap -x {x:.0f} -y {y:.0f}", "sleep 0.6", f"tap -x {x:.0f} -y {y:.0f}", "sleep 0.5",
-                  f"tap -x {x:.0f} -y {y:.0f}", "sleep 0.5", f"tap -x {x:.0f} -y {y:.0f}", "sleep 0.5",
+        steps += [f"tap -x {x:.0f} -y {y:.0f}", "sleep 0.6", *grid, "sleep 0.5", *grid, "sleep 0.5", *grid, "sleep 0.5",
                   "tap -x 300 -y 500", "sleep 0.8"]
     steps.append("sleep 1.0")
     return steps

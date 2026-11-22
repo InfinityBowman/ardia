@@ -13,20 +13,31 @@ public enum TabsPalette {
   public static let spaceBadge = Color.adaptive(light: .white, dark: Color(hex: 0x1C1C1E))
   public static let spaceBadgeInk = Color.adaptive(light: .black, dark: .white)
   public static let poof = Color(hex: 0xF7F5FF)
+  public static let deckBackdropTop: UInt32 = 0x1B1B2D
+  public static let deckBackdropBottom: UInt32 = 0x25222F
+  public static let barCircleFill = Color(hex: 0x3F3F4A)
+  public static let barCapsuleFill = Color(hex: 0x3A3A48)
+  public static let barGlyph = Color.white
+  public static let tuckedHeaderOpacity: Double = 0.6
   public static let placeholderTints: [UInt32] = [0xE8E6FB, 0xFBE7EE, 0xE3F0FB, 0xE6F5EA, 0xFDF0DD, 0xEFE6F8]
   public static let placeholderTintsDark: [UInt32] = [0x262447, 0x3F2532, 0x1E3046, 0x1F3527, 0x3D3020, 0x30243F]
 }
 
 public enum TabsLayout {
-  public static let cardRadius: CGFloat = 16
+  public static let cardRadius: CGFloat = 24
   public static let displayCornerRadius: CGFloat = 55
-  public static let faviconSize: CGFloat = 16
+  public static let faviconSize: CGFloat = 20
   public static let faviconRadius: CGFloat = 4
-  public static let headerSpacing: CGFloat = 6
-  public static let headerGap: CGFloat = 8
-  public static let barCircle: CGFloat = 48
-  public static let barPlus = CGSize(width: 77, height: 48)
-  public static let barSideInset: CGFloat = 12
+  public static let headerSpacing: CGFloat = 7
+  public static let glassCircle: CGFloat = 48
+  public static let barCircle: CGFloat = 33.5
+  public static let barPlus = CGSize(width: 75.5, height: 39.5)
+  public static let barSideInset: CGFloat = 24
+  public static let barHitTarget: CGFloat = 44
+  public static let glassPlusWidth: CGFloat = 77
+  public static let glassSideInset: CGFloat = 12
+  public static let barGlyph: CGFloat = 15
+  public static let barPlusGlyph: CGFloat = 20
   public static let barGap: CGFloat = 8
   public static let headerCircle: CGFloat = 44
   public static let headerCenter: CGFloat = 26
@@ -59,8 +70,6 @@ public enum TabsMotion {
   public static let fade = Animation.easeOut(duration: 0.2)
   public static let poofDuration: Double = 0.42
   public static let flyAway: Double = 0.2
-  public static let backdropSlowLoop: Double = 10
-  public static let backdropFastLoop: Double = 7
 
   public static func settle(distance: Double, velocity: Double) -> Animation {
     let initial = abs(distance) > 0.001 ? velocity / distance : 0

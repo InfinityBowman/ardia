@@ -56,39 +56,42 @@ nonisolated struct DeckPose {
   var scale: CGFloat
   var corner: CGFloat
   var opacity: Double
-  /// Radians. Cards gathered into the tabs button sit tilted, like the stack drawn on the button.
   var rotation: CGFloat = 0
+  var dim: CGFloat = 0
   var headerOpacity: Double
   var visibleWidth: CGFloat
 
-  /// Width of a card gathered into the tabs button.
-  static let launcherWidth: CGFloat = 26
+  static let launcherWidth: CGFloat = 28
+  static let frontTilt: CGFloat = 8 * .pi / 180
+  static let backTilt: CGFloat = -18 * .pi / 180
 
-  static func resolve(_ motion: DeckMotion, role: DeckRole, geometry: TabsDeckGeometry, isLast: Bool, tilt: CGFloat = 0) -> DeckPose {
-    let deckCenter = geometry.center(at: motion.relative)
+  static func resolve(_ motion: DeckMotion, role: DeckRole, geometry: TabsDeckGeometry, isLast: Bool, end: CGFloat = 0, launchDepth: Int = 0) -> DeckPose {
+    let deckCenter = geometry.center(at: motion.relative, end: end)
     let deckScale = geometry.scale(at: motion.relative)
     let scaleT = CGFloat(motion.scaleProgress)
     let positionT = CGFloat(motion.positionProgress)
     var center = deckCenter
     var scale = deckScale
-    var corner = TabsLayout.cardRadius
+    var corner = TabsLayout.cardRadius * deckScale
     var opacity = 1.0
     var rotation: CGFloat = 0
+    var dim = geometry.dim(at: motion.relative)
     switch role {
     case .stay:
       break
     case .expanded:
       scale = lerp(geometry.expandedScale, deckScale, scaleT)
       center = lerp(geometry.expandedCenter, deckCenter, positionT)
-      corner = lerp(TabsLayout.displayCornerRadius, TabsLayout.cardRadius, scaleT)
+      corner = lerp(TabsLayout.displayCornerRadius, TabsLayout.cardRadius * deckScale, scaleT)
+      dim *= scaleT
     case .launcher:
-      // Out of (or back into) the tabs button: a small tilted card there, a full card in the deck.
+      let front = launchDepth == 0
       let start = launcherWidth / max(geometry.cardSize.width, 1)
       scale = lerp(start, deckScale, scaleT)
-      center = lerp(geometry.tabButtonCenter, deckCenter, positionT)
-      corner = lerp(3, TabsLayout.cardRadius, scaleT)
-      rotation = tilt * (1 - positionT)
-      // Visible until the last stretch, where it merges into the button's own stack.
+      center = lerp(front ? geometry.tabButtonCenter : geometry.tabButtonBackCenter, deckCenter, positionT)
+      corner = lerp(4, TabsLayout.cardRadius * deckScale, scaleT)
+      rotation = (front ? frontTilt : backTilt) * (1 - positionT)
+      dim *= scaleT
       opacity = min(1, max(0, motion.scaleProgress) * 5)
     case .slideLeft:
       center.x -= (1 - positionT) * geometry.container.width * 0.7
@@ -101,14 +104,16 @@ nonisolated struct DeckPose {
     opacity *= Double(1 - vanish)
     let settle = role == .stay ? 1 : max(0, (motion.positionProgress - 0.7) / 0.3)
     let liftFade = max(0, 1 + motion.lift / 120)
+    let tuckFade = 1 - (1 - TabsPalette.tuckedHeaderOpacity) * min(max(-motion.relative, 0), 1)
     return DeckPose(
       center: center,
       scale: scale,
       corner: corner,
       opacity: opacity,
       rotation: rotation,
-      headerOpacity: min(1, settle) * min(1, liftFade) * Double(1 - vanish),
-      visibleWidth: geometry.visibleWidth(at: motion.relative, isLast: isLast)
+      dim: dim,
+      headerOpacity: min(1, settle) * min(1, liftFade) * Double(1 - vanish) * tuckFade,
+      visibleWidth: geometry.visibleWidth(at: motion.relative, isLast: isLast, end: end)
     )
   }
 
@@ -171,7 +176,7 @@ struct DeckHeaderPlacement: ViewModifier, Animatable {
     let cardWidth = geometry.cardSize.width * pose.scale
     let leading = pose.center.x - cardWidth / 2
     let width = max(pose.visibleWidth, 0)
-    let y = pose.center.y - cardHeight / 2 - TabsLayout.headerGap - TabsDeckGeometry.headerHeight / 2
+    let y = pose.center.y - cardHeight / 2 - TabsDeckGeometry.headerAboveCard * pose.scale + TabsDeckGeometry.headerHeight / 2
     let available = max(width - 8, 0)
     let centerX = max(leading + width / 2, TabsLayout.faviconSize / 2 + 8)
     content
