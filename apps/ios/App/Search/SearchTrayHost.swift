@@ -9,6 +9,7 @@ struct SearchTrayHost: View {
   @Environment(\.usesGlass) private var usesGlass
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @ScaledMetric(relativeTo: .title3) private var fieldScale: CGFloat = 1
   @State private var shown: BrowseSession.SearchRequest?
   @State private var presentation = 0
@@ -59,7 +60,8 @@ struct SearchTrayHost: View {
             onDismiss: { app.cancelSearch() },
             onClosed: { finishClosing() },
             content: riderContent(maxHeight: maxHeight, liveLift: liveLift, safeBottom: safeBottom),
-            icons: barIcons(safeBottom: safeBottom)
+            icons: barIcons(safeBottom: safeBottom),
+            band: SearchBarBand(height: BrowseLayout.barHeight(safeBottom: safeBottom), isShown: handsBackToBar)
           )
           .ignoresSafeArea()
         } else if let shown {
@@ -129,17 +131,17 @@ struct SearchTrayHost: View {
     .environment(\.screenLayout, screenLayout)
   }
 
-  private func barIcons(safeBottom: CGFloat) -> some View {
-    SearchBarIcons(safeBottom: safeBottom, isShown: showsBarIcons && app.surface == .browsing && shown?.origin == .page)
-      .environment(app)
-      .environment(\.profileLook, look)
-      .environment(\.usesGlass, usesGlass)
-      .environment(\.screenLayout, screenLayout)
+  private func barIcons(safeBottom: CGFloat) -> SearchBarIcons {
+    SearchBarIcons(safeBottom: safeBottom, isShown: handsBackToBar, app: app, look: look, usesGlass: usesGlass, screenLayout: screenLayout)
+  }
+
+  private var handsBackToBar: Bool {
+    showsBarIcons && app.surface == .browsing && app.tabs.selectedTab != nil
   }
 
   private func growth(panelHeight: CGFloat, safeBottom: CGFloat) -> RiderGrowth {
     let incognito = app.isIncognito
-    let colors = PanelColors.resolved(incognito: incognito, dark: incognito || colorScheme == .dark)
+    let colors = PanelColors.resolved(incognito: incognito, dark: colorScheme == .dark, opaque: reduceTransparency)
     return RiderGrowth(
       panelHeight: panelHeight,
       lineAboveBottom: BrowseLayout.barLine(safeBottom: safeBottom),
@@ -153,6 +155,9 @@ struct SearchTrayHost: View {
       glyphSize: BrowseLayout.barPlusGlyph,
       font: PanelColors.font(for: dynamicTypeSize),
       panelFill: colors.panelFill,
+      panelBlurs: colors.panelBlurs,
+      panelEdge: colors.panelEdge,
+      panelRadius: BrowseLayout.sheetPanelRadius,
       fieldFill: colors.fieldFill,
       fieldEdge: colors.fieldEdge,
       glyph: colors.glyph,
@@ -160,9 +165,12 @@ struct SearchTrayHost: View {
       text: colors.text,
       accessory: colors.accessory,
       accent: colors.accent,
+      tileFill: colors.tileFill,
+      tileEdge: colors.tileEdge,
       initialText: shown?.initialText ?? "",
       showsAccessories: !incognito && !dynamicTypeSize.isAccessibilitySize,
-      dim: shown?.origin == .page ? BrowseLayout.trayDim : 0
+      dim: shown?.origin == .page ? BrowseLayout.trayDim : 0,
+      handsBackToBar: handsBackToBar
     )
   }
 
@@ -331,6 +339,8 @@ struct SearchTrayHost: View {
 @MainActor
 private struct PanelColors {
   let panelFill: UIColor
+  let panelBlurs: Bool
+  let panelEdge: UIColor
   let fieldFill: UIColor
   let fieldEdge: UIColor
   let glyph: UIColor
@@ -338,24 +348,33 @@ private struct PanelColors {
   let text: UIColor
   let accessory: UIColor
   let accent: UIColor
+  let tileFill: UIColor
+  let tileEdge: UIColor
 
   private static var cache: [Int: PanelColors] = [:]
   private static var fonts: [DynamicTypeSize: UIFont] = [:]
 
-  static func resolved(incognito: Bool, dark: Bool) -> PanelColors {
-    let key = (incognito ? 2 : 0) + (dark ? 1 : 0)
+  static func resolved(incognito: Bool, dark: Bool, opaque: Bool) -> PanelColors {
+    let key = (incognito ? 4 : 0) + (dark ? 2 : 0) + (opaque ? 1 : 0)
     if let cached = cache[key] { return cached }
-    let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
-    func resolve(_ color: Color) -> UIColor { UIColor(color).resolvedColor(with: traits) }
+    let panelTraits = UITraitCollection(userInterfaceStyle: dark || incognito ? .dark : .light)
+    let barTraits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+    func resolve(_ color: Color) -> UIColor { UIColor(color).resolvedColor(with: panelTraits) }
+    let blurs = dark && !incognito && !opaque
+    let fill: Color = incognito ? SearchPanelPalette.incognitoFill : blurs ? SearchPanelPalette.materialTint.opacity(SearchPanelPalette.materialTintShare) : SearchPanelPalette.fill
     let colors = PanelColors(
-      panelFill: resolve(incognito ? SearchPanelPalette.incognitoFill : SearchPanelPalette.fill),
+      panelFill: resolve(fill),
+      panelBlurs: blurs,
+      panelEdge: resolve(SearchPanelPalette.edge),
       fieldFill: resolve(incognito ? SearchPanelPalette.incognitoField : SearchPanelPalette.field),
       fieldEdge: resolve(SearchPanelPalette.fieldEdge),
-      glyph: resolve(BrowsePalette.barGlyph),
+      glyph: UIColor(BrowsePalette.barGlyph).resolvedColor(with: barTraits),
       placeholder: resolve(SearchPanelPalette.placeholder),
       text: resolve(SearchPanelPalette.text),
       accessory: resolve(SearchPanelPalette.accessory),
-      accent: resolve(BrowsePalette.searchAccent)
+      accent: resolve(BrowsePalette.searchAccent),
+      tileFill: UIColor(BrowsePalette.barPlusFill).resolvedColor(with: barTraits),
+      tileEdge: UIColor(BrowsePalette.barControlEdge).resolvedColor(with: barTraits)
     )
     cache[key] = colors
     return colors
@@ -372,11 +391,14 @@ private struct PanelColors {
 private struct SearchBarIcons: View, Equatable {
   let safeBottom: CGFloat
   let isShown: Bool
-
-  @Environment(AppModel.self) private var app
+  let app: AppModel
+  let look: ProfileLook
+  let usesGlass: Bool
+  let screenLayout: ScreenLayout
 
   nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-    lhs.safeBottom == rhs.safeBottom && lhs.isShown == rhs.isShown
+    lhs.safeBottom == rhs.safeBottom && lhs.isShown == rhs.isShown && lhs.app === rhs.app
+      && lhs.look == rhs.look && lhs.usesGlass == rhs.usesGlass && lhs.screenLayout == rhs.screenLayout
   }
 
   var body: some View {
@@ -389,6 +411,39 @@ private struct SearchBarIcons: View, Equatable {
       )
       .frame(height: BrowseLayout.barHeight(safeBottom: safeBottom), alignment: .bottom)
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+      .ignoresSafeArea()
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
+      .environment(app)
+      .environment(\.profileLook, look)
+      .environment(\.usesGlass, usesGlass)
+      .environment(\.screenLayout, screenLayout)
+    }
+  }
+}
+
+private struct SearchBarBand: View, Equatable {
+  let height: CGFloat
+  let isShown: Bool
+
+  @Environment(\.displayScale) private var displayScale
+
+  nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.height == rhs.height && lhs.isShown == rhs.isShown
+  }
+
+  var body: some View {
+    if isShown {
+      ZStack(alignment: .top) {
+        BarBackdropBlur()
+        VStack(spacing: 0) {
+          LinearGradient(colors: [BrowsePalette.barBandTop, BrowsePalette.barBandBottom], startPoint: .top, endPoint: .bottom)
+            .frame(height: height)
+          BrowsePalette.barBandBottom
+        }
+        BrowsePalette.barBandEdge
+          .frame(height: 1 / max(displayScale, 1))
+      }
       .ignoresSafeArea()
       .allowsHitTesting(false)
       .accessibilityHidden(true)

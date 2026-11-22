@@ -15,6 +15,9 @@ struct RiderGrowth: Equatable {
   var glyphSize: CGFloat
   var font: UIFont
   var panelFill: UIColor
+  var panelBlurs: Bool
+  var panelEdge: UIColor
+  var panelRadius: CGFloat
   var fieldFill: UIColor
   var fieldEdge: UIColor
   var glyph: UIColor
@@ -22,12 +25,15 @@ struct RiderGrowth: Equatable {
   var text: UIColor
   var accessory: UIColor
   var accent: UIColor
+  var tileFill: UIColor
+  var tileEdge: UIColor
   var initialText: String
   var showsAccessories: Bool
   var dim: CGFloat
+  var handsBackToBar: Bool
 }
 
-struct KeyboardRider<Content: View, Icons: View>: UIViewControllerRepresentable {
+struct KeyboardRider<Content: View, Icons: View & Equatable, Band: View & Equatable>: UIViewControllerRepresentable {
   var holdsLift: Bool
   var dragOffset: CGFloat
   var isVisible: Bool
@@ -37,6 +43,14 @@ struct KeyboardRider<Content: View, Icons: View>: UIViewControllerRepresentable 
   var onClosed: () -> Void = {}
   let content: Content
   let icons: Icons
+  let band: Band
+
+  final class Coordinator {
+    var icons: Icons?
+    var band: Band?
+  }
+
+  func makeCoordinator() -> Coordinator { Coordinator() }
 
   func makeUIViewController(context: Context) -> KeyboardRiderController {
     KeyboardRiderController()
@@ -44,11 +58,19 @@ struct KeyboardRider<Content: View, Icons: View>: UIViewControllerRepresentable 
 
   func updateUIViewController(_ controller: KeyboardRiderController, context: Context) {
     let transaction = context.transaction
+    let coordinator = context.coordinator
     controller.onDismiss = onDismiss
     controller.onClosed = onClosed
+    if coordinator.icons != icons {
+      coordinator.icons = icons
+      controller.setIcons(AnyView(icons))
+    }
+    if coordinator.band != band {
+      coordinator.band = band
+      controller.setBand(AnyView(band))
+    }
     controller.update(
       content: AnyView(content),
-      icons: AnyView(icons),
       holdsLift: holdsLift,
       dragOffset: dragOffset,
       isVisible: isVisible,
@@ -63,6 +85,44 @@ private final class PassThroughView: UIView {
   override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
     let hit = super.hitTest(point, with: event)
     return hit === self ? nil : hit
+  }
+}
+
+private final class ShapeView: UIView {
+  override class var layerClass: AnyClass { CAShapeLayer.self }
+  var shape: CAShapeLayer { layer as! CAShapeLayer }
+}
+
+private final class PanelMaterialView: UIView {
+  private let blur = BarBlurView()
+  private let tint = UIView()
+  private var blurs = true
+
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    isUserInteractionEnabled = false
+    clipsToBounds = true
+    layer.cornerCurve = .continuous
+    layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+    for view in [blur, tint] {
+      view.frame = bounds
+      view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      addSubview(view)
+    }
+  }
+
+  required init?(coder: NSCoder) { nil }
+
+  func configure(_ growth: RiderGrowth) {
+    if blurs != growth.panelBlurs {
+      blurs = growth.panelBlurs
+      blur.isHidden = !blurs
+    }
+    if tint.backgroundColor != growth.panelFill { tint.backgroundColor = growth.panelFill }
+    if layer.cornerRadius != growth.panelRadius { layer.cornerRadius = growth.panelRadius }
+    let edge = growth.panelEdge.cgColor
+    if layer.borderColor != edge { layer.borderColor = edge }
+    layer.borderWidth = 1 / max(traitCollection.displayScale, 1)
   }
 }
 
@@ -89,6 +149,7 @@ private final class RiderDimView: UIView {
 
 final class FieldMorphView: UIView {
   private let skin = UIView()
+  private let tile = UIView()
   private let plus = UIImageView()
   private let label = UILabel()
   private let caret = UIView()
@@ -105,9 +166,11 @@ final class FieldMorphView: UIView {
     layer.cornerCurve = .continuous
     skin.layer.cornerCurve = .continuous
     skin.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    tile.layer.cornerCurve = .continuous
+    tile.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     caret.layer.cornerRadius = 1
     label.lineBreakMode = .byClipping
-    for view in [skin, label, caret, mic, eyes, plus] { addSubview(view) }
+    for view in [tile, skin, label, caret, mic, eyes, plus] { addSubview(view) }
   }
 
   required init?(coder: NSCoder) { nil }
@@ -118,6 +181,9 @@ final class FieldMorphView: UIView {
     skin.backgroundColor = growth.fieldFill
     skin.layer.borderColor = growth.fieldEdge.cgColor
     skin.layer.borderWidth = 1 / max(traitCollection.displayScale, 1)
+    tile.backgroundColor = growth.tileFill
+    tile.layer.borderColor = growth.tileEdge.cgColor
+    tile.layer.borderWidth = 0.5
     loadSymbols(glyphSize: growth.glyphSize, accessorySize: growth.font.pointSize)
     plus.tintColor = growth.glyph
     label.font = growth.font
@@ -155,10 +221,15 @@ final class FieldMorphView: UIView {
     eyes.center = CGPoint(x: fieldWidth - growth.fieldTrailing - 18, y: height / 2)
     layer.cornerRadius = height / 2
     skin.layer.cornerRadius = height / 2
+    tile.layer.cornerRadius = height / 2
   }
 
   func setPlus(visible: Bool) { plus.alpha = visible ? 1 : 0 }
   func setSkin(visible: Bool) { skin.alpha = visible ? 1 : 0 }
+  func setTile(visible: Bool) { tile.alpha = visible ? 1 : 0 }
+  func setText(visible: Bool) {
+    for view in [label, caret, mic, eyes] { view.alpha = visible ? 1 : 0 }
+  }
 }
 
 final class KeyboardRiderController: UIViewController {
@@ -167,10 +238,14 @@ final class KeyboardRiderController: UIViewController {
 
   private let host = UIHostingController(rootView: AnyView(EmptyView()))
   private let iconsHost = UIHostingController(rootView: AnyView(EmptyView()))
+  private let bandHost = UIHostingController(rootView: AnyView(EmptyView()))
   private let dim = RiderDimView()
   private let riser = PassThroughView()
   private let body = PassThroughView()
-  private let cover = UIView()
+  private let material = PanelMaterialView()
+  private let fieldMask = UIView()
+  private let maskBase = ShapeView()
+  private let maskHole = UIView()
   private let morph = FieldMorphView()
   private var growth: RiderGrowth?
   private var isVisible = false
@@ -182,12 +257,17 @@ final class KeyboardRiderController: UIViewController {
   private var awaitingKeyboard = false
   private var openTarget: CGFloat = 0
   private var generation = 0
+  private var waitGeneration = 0
+  private var settledLift: CGFloat?
   private var isMorphing = false
   nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
 
   static let liftKey = "searchPanel.keyboardLift"
   static let keyboardThreshold: CGFloat = 120
-  static let keyboardWait: TimeInterval = 0.45
+  static let keyboardWait: TimeInterval = 3
+  static let keyboardSwapWait: TimeInterval = 0.6
+  static let smallFrameGrace: TimeInterval = 0.3
+  static let instantFrame: TimeInterval = 0.05
   static let handoffDelay: TimeInterval = 0.3
   static let handoffFade: TimeInterval = 0.08
   static let plusFade: TimeInterval = 0.08
@@ -197,10 +277,16 @@ final class KeyboardRiderController: UIViewController {
   static let iconsFadeOut: TimeInterval = 0.2
   static let iconsFadeIn: TimeInterval = 0.15
   static let iconsFadeInDelay: TimeInterval = 0.1
+  static let handBackFade: TimeInterval = 0.035
+  static let handBackRowsFade: TimeInterval = 0.1
+  static let handBackIconsDelay: TimeInterval = 0.02
+  static let handBackIconsFade: TimeInterval = 0.06
+  static let closeTextFade: TimeInterval = 0.06
   static let closeFade: TimeInterval = 0.08
   static let closeFadeDelay: TimeInterval = 0.36
   static let closeSettle: TimeInterval = 0.45
   static let dimFade: TimeInterval = 0.25
+  static let dimClear: TimeInterval = 0.12
   static let defaultKeyboardLift: CGFloat = 336
   static let symbolWarmDelay: TimeInterval = 1.5
 
@@ -221,17 +307,28 @@ final class KeyboardRiderController: UIViewController {
     dim.onTap = { [weak self] in self?.onDismiss() }
     view.addSubview(dim)
     view.addSubview(riser)
+    addChild(bandHost)
+    bandHost.view.backgroundColor = .clear
+    bandHost.view.isUserInteractionEnabled = false
+    bandHost.view.alpha = 0
+    if #available(iOS 16.4, *) { bandHost.safeAreaRegions = [] }
+    riser.addSubview(bandHost.view)
+    bandHost.didMove(toParent: self)
     addChild(host)
     host.view.backgroundColor = .clear
     if #available(iOS 16.4, *) { host.safeAreaRegions = [] }
     body.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     riser.addSubview(body)
+    material.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    body.addSubview(material)
     body.addSubview(host.view)
     host.didMove(toParent: self)
-    cover.isUserInteractionEnabled = false
-    cover.layer.cornerCurve = .continuous
-    cover.alpha = 0
-    body.addSubview(cover)
+    maskBase.shape.fillRule = .evenOdd
+    maskBase.shape.fillColor = UIColor.black.cgColor
+    maskHole.backgroundColor = .black
+    maskHole.layer.cornerCurve = .continuous
+    fieldMask.addSubview(maskBase)
+    fieldMask.addSubview(maskHole)
     addChild(iconsHost)
     iconsHost.view.backgroundColor = .clear
     iconsHost.view.isUserInteractionEnabled = false
@@ -246,15 +343,22 @@ final class KeyboardRiderController: UIViewController {
       self?.morph.loadSymbols(glyphSize: BrowseLayout.barPlusGlyph, accessorySize: size)
     }
     let center = NotificationCenter.default
-    observers.append(center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
-      let info = KeyboardChange(note)
-      MainActor.assumeIsolated { self?.keyboardWillChange(info) }
-    })
-    observers.append(center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] note in
-      var info = KeyboardChange(note)
-      info.hides = true
-      MainActor.assumeIsolated { self?.keyboardWillChange(info) }
-    })
+    if KeyboardReplay.isActive {
+      observers.append(center.addObserver(forName: KeyboardReplay.notification, object: nil, queue: .main) { [weak self] note in
+        let info = KeyboardChange(note)
+        MainActor.assumeIsolated { self?.keyboardWillChange(info) }
+      })
+    } else {
+      observers.append(center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
+        let info = KeyboardChange(note)
+        MainActor.assumeIsolated { self?.keyboardWillChange(info) }
+      })
+      observers.append(center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] note in
+        var info = KeyboardChange(note)
+        info.hides = true
+        MainActor.assumeIsolated { self?.keyboardWillChange(info) }
+      })
+    }
     observers.append(center.addObserver(forName: UITextField.textDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated { self?.handOff() }
     })
@@ -272,23 +376,29 @@ final class KeyboardRiderController: UIViewController {
     let bounds = view.bounds
     dim.frame = bounds
     if riser.bounds.size != bounds.size {
-      riser.bounds = CGRect(origin: .zero, size: bounds.size)
-      body.frame = riser.bounds
-      host.view.frame = body.bounds
+      sizeRiser()
       if !view.isHidden, growth != nil { place(top: restingTop()) }
     }
+  }
+
+  private func sizeRiser() {
+    riser.bounds = CGRect(origin: .zero, size: view.bounds.size)
+    body.frame = riser.bounds
+    material.frame = body.bounds
+    host.view.frame = body.bounds
+    bandHost.view.frame = riser.bounds
   }
 
   private var screenHeight: CGFloat { view.bounds.height }
   private var safeBottom: CGFloat { view.window?.safeAreaInsets.bottom ?? view.safeAreaInsets.bottom }
 
   private var keyboardLift: CGFloat {
-    keyboardOverlap > Self.keyboardThreshold ? keyboardOverlap : safeBottom
+    keyboardOverlap > Self.keyboardThreshold ? keyboardOverlap : max(keyboardOverlap, safeBottom)
   }
 
   private var expectedLift: CGFloat {
     if keyboardOverlap > Self.keyboardThreshold { return keyboardOverlap }
-    let stored = Self.rememberedLift ?? UserDefaults.standard.double(forKey: Self.liftKey)
+    let stored = Self.rememberedLift
     return stored > 0 ? max(CGFloat(stored), safeBottom) : Self.defaultKeyboardLift
   }
 
@@ -334,9 +444,17 @@ final class KeyboardRiderController: UIViewController {
     )
   }
 
-  func update(content: AnyView, icons: AnyView, holdsLift: Bool, dragOffset: CGFloat, isVisible visible: Bool, isInteractive: Bool, growth: RiderGrowth, animatesDrag: Bool) {
-    host.rootView = content
+  func setIcons(_ icons: AnyView) {
     iconsHost.rootView = icons
+  }
+
+  func setBand(_ band: AnyView) {
+    bandHost.rootView = band
+  }
+
+  func update(content: AnyView, holdsLift: Bool, dragOffset: CGFloat, isVisible visible: Bool, isInteractive: Bool, growth: RiderGrowth, animatesDrag: Bool) {
+    host.rootView = content
+    if self.growth != growth { material.configure(growth) }
     self.growth = growth
     let iconsFrame = CGRect(x: 0, y: 0, width: view.bounds.width, height: growth.bandAboveBottom)
     if iconsHost.view.frame != iconsFrame { iconsHost.view.frame = iconsFrame }
@@ -372,6 +490,28 @@ final class KeyboardRiderController: UIViewController {
     if moves { spring(response: BrowseLayout.searchOpenResponse) { self.place(top: self.restingTop()) } }
   }
 
+  private func hideField() {
+    guard growth != nil else { return }
+    let bounds = host.view.bounds
+    let hole = fieldRect.insetBy(dx: -1.5, dy: -1.5)
+    UIView.performWithoutAnimation {
+      fieldMask.frame = bounds
+      maskBase.frame = bounds
+      let path = UIBezierPath(rect: bounds)
+      path.append(UIBezierPath(roundedRect: hole, cornerRadius: hole.height / 2))
+      maskBase.shape.path = path.cgPath
+      maskHole.layer.removeAllAnimations()
+      maskHole.frame = hole
+      maskHole.layer.cornerRadius = hole.height / 2
+      maskHole.alpha = 0
+    }
+    if host.view.mask !== fieldMask { host.view.mask = fieldMask }
+  }
+
+  private func showField() {
+    host.view.mask = nil
+  }
+
   private func open() {
     guard let growth else { return }
     generation += 1
@@ -380,33 +520,32 @@ final class KeyboardRiderController: UIViewController {
     view.isHidden = false
     UIView.performWithoutAnimation {
       view.layoutIfNeeded()
-      if riser.bounds.size != view.bounds.size {
-        riser.bounds = CGRect(origin: .zero, size: view.bounds.size)
-        body.frame = riser.bounds
-        host.view.frame = body.bounds
-      }
+      if riser.bounds.size != view.bounds.size { sizeRiser() }
       host.view.layoutIfNeeded()
     }
     awaitingKeyboard = keyboardOverlap <= Self.keyboardThreshold && !holdsLift
     openTarget = expectedLift
     let target = openTop(lift: currentLift) + dragOffset
     let field = fieldRect
-    cover.frame = field.insetBy(dx: -1.5, dy: -1.5)
-    cover.layer.cornerRadius = cover.bounds.height / 2
-    cover.backgroundColor = growth.panelFill
+    bandHost.view.layer.removeAllAnimations()
+    bandHost.view.alpha = 0
+    material.layer.removeAllAnimations()
+    material.alpha = 1
+    host.view.layer.removeAllAnimations()
+    host.view.alpha = 1
 
     if UIAccessibility.isReduceMotionEnabled {
       iconsHost.view.alpha = 0
-      cover.alpha = 0
       morph.alpha = 0
       isMorphing = false
+      showField()
       UIView.performWithoutAnimation { place(top: target) }
       if !reopening { body.alpha = 0 }
       UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
         self.body.alpha = 1
         self.dim.backgroundColor = UIColor.black.withAlphaComponent(growth.dim)
       }
-      scheduleKeyboardWait()
+      scheduleKeyboardWait(Self.keyboardWait)
       return
     }
 
@@ -419,12 +558,15 @@ final class KeyboardRiderController: UIViewController {
         morph.configure(growth, text: growth.initialText, showsCaret: true)
         morph.pose(open: false, growth: growth, fieldWidth: field.width)
         morph.setPlus(visible: true)
+        morph.setTile(visible: true)
         morph.setSkin(visible: false)
+        morph.setText(visible: true)
       }
     } else {
       morph.configure(growth, text: currentFieldText(), showsCaret: true)
+      morph.setText(visible: true)
     }
-    cover.alpha = 1
+    hideField()
     morph.alpha = 1
     isMorphing = true
     UIView.animate(withDuration: Self.bodyFade, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]) {
@@ -440,6 +582,7 @@ final class KeyboardRiderController: UIViewController {
     }
     UIView.animate(withDuration: Self.skinFade, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
       self.morph.setSkin(visible: true)
+      self.morph.setTile(visible: false)
     }
     later(Self.plusFadeDelay, over: Self.plusFade) {
       self.morph.setPlus(visible: false)
@@ -453,21 +596,24 @@ final class KeyboardRiderController: UIViewController {
     let opened = generation
     later(Self.handoffDelay, over: Self.handoffFade, {
       self.morph.alpha = 0
-      self.cover.alpha = 0
+      self.maskHole.alpha = 1
     }, completion: { [weak self] in
-      guard let self, self.generation == opened else { return }
+      guard let self, self.generation == opened, self.isVisible else { return }
       self.isMorphing = false
+      self.showField()
     })
-    scheduleKeyboardWait()
+    scheduleKeyboardWait(Self.keyboardWait)
   }
 
-  private func scheduleKeyboardWait() {
+  private func scheduleKeyboardWait(_ wait: TimeInterval) {
     guard awaitingKeyboard else { return }
+    waitGeneration += 1
+    let waiting = waitGeneration
     let opened = generation
-    DispatchQueue.main.asyncAfter(deadline: .now() + Self.keyboardWait) { [weak self] in
-      guard let self, self.generation == opened, self.isVisible, self.awaitingKeyboard else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+      guard let self, self.generation == opened, self.waitGeneration == waiting, self.isVisible, self.awaitingKeyboard else { return }
       self.awaitingKeyboard = false
-      self.rememberLift()
+      if self.keyboardOverlap > 0 { self.settledLift = self.keyboardLift }
       guard !self.holdsLift else { return }
       self.spring(response: BrowseLayout.searchOpenResponse) { self.place(top: self.restingTop()) }
     }
@@ -476,9 +622,13 @@ final class KeyboardRiderController: UIViewController {
   private func handOff() {
     guard isMorphing, isVisible else { return }
     isMorphing = false
+    let opened = generation
     UIView.animate(withDuration: Self.handoffFade, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
       self.morph.alpha = 0
-      self.cover.alpha = 0
+      self.maskHole.alpha = 1
+    } completion: { [weak self] _ in
+      guard let self, self.generation == opened, self.isVisible else { return }
+      self.showField()
     }
   }
 
@@ -488,13 +638,16 @@ final class KeyboardRiderController: UIViewController {
     isVisible = false
     awaitingKeyboard = false
     let closing = generation
+    if let settledLift {
+      Self.remember(settledLift)
+      self.settledLift = nil
+    }
 
     if UIAccessibility.isReduceMotionEnabled {
       UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState]) {
         self.body.alpha = 0
         self.dim.backgroundColor = .clear
         self.morph.alpha = 0
-        self.cover.alpha = 0
       } completion: { _ in self.finishClose(closing) }
       return
     }
@@ -510,14 +663,15 @@ final class KeyboardRiderController: UIViewController {
         morph.pose(open: true, growth: growth, fieldWidth: field.width)
         morph.setPlus(visible: false)
         morph.setSkin(visible: true)
+        morph.setTile(visible: false)
       } else {
         morph.configure(growth, text: text, showsCaret: false)
       }
+      morph.setText(visible: true)
     }
     morph.layer.removeAnimation(forKey: "opacity")
-    cover.layer.removeAnimation(forKey: "opacity")
     morph.alpha = 1
-    cover.alpha = 1
+    hideField()
 
     spring(response: BrowseLayout.searchCloseResponse) {
       self.place(top: self.closedTop)
@@ -530,28 +684,53 @@ final class KeyboardRiderController: UIViewController {
       self.morph.frame = self.capsuleRect
       self.morph.pose(open: false, growth: growth, fieldWidth: field.width)
     }
+    UIView.animate(withDuration: Self.closeTextFade, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
+      self.morph.setText(visible: false)
+    }
     later(Self.plusFadeDelay * 2, over: Self.plusFade) {
       self.morph.setPlus(visible: true)
     }
-    later(Self.iconsFadeInDelay, over: Self.iconsFadeIn) {
+
+    guard growth.handsBackToBar else {
+      later(Self.iconsFadeInDelay, over: Self.iconsFadeIn) {
+        self.iconsHost.view.alpha = 1
+      }
+      UIView.animate(withDuration: Self.dimFade, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
+        self.dim.backgroundColor = .clear
+      }
+      later(Self.closeFadeDelay, over: Self.closeFade) {
+        self.body.alpha = 0
+        self.morph.alpha = 0
+      }
+      return
+    }
+
+    UIView.animate(withDuration: Self.handBackFade, delay: 0, options: [.beginFromCurrentState, .curveLinear]) {
+      self.material.alpha = 0
+      self.bandHost.view.alpha = 1
+      self.morph.setSkin(visible: false)
+      self.morph.setTile(visible: true)
+    }
+    UIView.animate(withDuration: Self.handBackRowsFade, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
+      self.host.view.alpha = 0
+    }
+    later(Self.handBackIconsDelay, over: Self.handBackIconsFade) {
       self.iconsHost.view.alpha = 1
     }
-    UIView.animate(withDuration: Self.dimFade, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
+    UIView.animate(withDuration: Self.dimClear, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
       self.dim.backgroundColor = .clear
-    }
-    later(Self.closeFadeDelay, over: Self.closeFade) {
-      self.body.alpha = 0
-      self.cover.alpha = 0
-      self.morph.alpha = 0
     }
   }
 
   private func finishClose(_ closing: Int) {
     guard generation == closing, !isVisible else { return }
     view.isHidden = true
+    showField()
     iconsHost.view.alpha = 0
+    bandHost.view.alpha = 0
     morph.alpha = 0
-    cover.alpha = 0
+    material.alpha = 1
+    host.view.alpha = 1
     body.alpha = 1
     dragOffset = 0
     heldLift = nil
@@ -574,22 +753,40 @@ final class KeyboardRiderController: UIViewController {
 
   private func keyboardWillChange(_ change: KeyboardChange) {
     guard let window = view.window else { return }
+    let previousLift = currentLift
     var overlap: CGFloat = 0
     if !change.hides, let end = change.end {
       let local = view.convert(end, from: window.screen.coordinateSpace)
       overlap = max(0, view.bounds.maxY - local.minY)
     }
+    let arrived = overlap > Self.keyboardThreshold
     keyboardOverlap = overlap
+    HarnessProbe.mark("rider.keyboard", "\(Int(overlap)) \(change.hides ? "hide" : "show") \(change.duration)")
     guard isVisible else { return }
-    if overlap > Self.keyboardThreshold || awaitingKeyboard { rememberLift() }
     if awaitingKeyboard {
-      guard overlap > Self.keyboardThreshold || change.hides == false else { return }
+      guard !change.hides else { return }
+      guard arrived else {
+        scheduleKeyboardWait(Self.smallFrameGrace)
+        return
+      }
       awaitingKeyboard = false
+      settledLift = keyboardLift
       guard !holdsLift else { return }
       spring(response: BrowseLayout.searchOpenResponse) { self.place(top: self.restingTop()) }
       return
     }
+    if change.hides, textField?.isFirstResponder == true, !holdsLift {
+      awaitingKeyboard = true
+      openTarget = previousLift
+      scheduleKeyboardWait(Self.keyboardSwapWait)
+      return
+    }
+    if !change.hides { settledLift = keyboardLift }
     guard !holdsLift else { return }
+    if change.duration < Self.instantFrame {
+      spring(response: BrowseLayout.searchOpenResponse) { self.place(top: self.restingTop()) }
+      return
+    }
     let options = UIView.AnimationOptions(rawValue: UInt(change.curve) << 16).union([.beginFromCurrentState, .allowUserInteraction])
     UIView.animate(withDuration: change.duration, delay: 0, options: options) {
       self.place(top: self.restingTop())
@@ -605,14 +802,21 @@ final class KeyboardRiderController: UIViewController {
     }
   }
 
-  private func rememberLift() {
-    let lift = Double(keyboardLift)
-    guard Self.rememberedLift != lift else { return }
-    Self.rememberedLift = lift
-    UserDefaults.standard.set(lift, forKey: Self.liftKey)
+  private static var cachedLift: Double?
+
+  private static var rememberedLift: Double {
+    if let cachedLift { return cachedLift }
+    let stored = UserDefaults.standard.double(forKey: liftKey)
+    cachedLift = stored
+    return stored
   }
 
-  private static var rememberedLift: Double?
+  private static func remember(_ lift: CGFloat) {
+    let value = Double(lift)
+    guard rememberedLift != value else { return }
+    cachedLift = value
+    UserDefaults.standard.set(value, forKey: liftKey)
+  }
 
   private func spring(response: Double, _ animations: @escaping () -> Void) {
     UIView.animate(springDuration: response, bounce: 0, initialSpringVelocity: 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: animations)
@@ -630,5 +834,6 @@ nonisolated private struct KeyboardChange: Sendable {
     end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
     duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
     curve = (info[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int) ?? 7
+    hides = (info[KeyboardReplay.hidesKey] as? Bool) ?? false
   }
 }

@@ -47,16 +47,18 @@ public enum BrowsePalette {
 
 public enum SearchPanelPalette {
   public static let fill = Color.adaptive(light: Color(hex: 0xF0F0F1), dark: Color(hex: 0x212023))
+  public static let materialTint = Color(hex: 0x2B2A2D)
+  public static let materialTintShare: Double = 0.63
   public static let incognitoFill = Color(hex: 0x151517)
-  public static let edge = Color.adaptive(light: .black.opacity(0.06), dark: .white.opacity(0.16))
-  public static let field = Color.adaptive(light: Color(hex: 0xD1D2D2), dark: Color(hex: 0x3A393C))
+  public static let edge = Color.adaptive(light: .black.opacity(0.06), dark: .white.opacity(0.24))
+  public static let field = Color.adaptive(light: Color(hex: 0xD1D2D2), dark: .white.opacity(0.12))
   public static let incognitoField = Color(hex: 0x2C2C2F)
   public static let fieldEdge = Color.adaptive(light: .black.opacity(0.05), dark: .white.opacity(0.17))
   public static let text = Color.adaptive(light: Color(hex: 0x171717), dark: .white)
   public static let secondaryText = Color.adaptive(light: .black.opacity(0.5), dark: .white.opacity(0.6))
-  public static let placeholder = Color.adaptive(light: Color(hex: 0x737374), dark: Color(hex: 0x9F9FA6))
-  public static let rowGlyph = Color.adaptive(light: Color(hex: 0x48484A), dark: Color(hex: 0xD0CFD1))
-  public static let accessory = Color.adaptive(light: Color(hex: 0x7A7A7C), dark: Color(hex: 0x979699))
+  public static let placeholder = Color.adaptive(light: Color(hex: 0x737374), dark: .white.opacity(0.51))
+  public static let rowGlyph = Color.adaptive(light: Color(hex: 0x48484A), dark: .white.opacity(0.8))
+  public static let accessory = Color.adaptive(light: Color(hex: 0x7A7A7C), dark: .white.opacity(0.5))
   public static let highlight = Color.adaptive(light: .black.opacity(0.05), dark: .white.opacity(0.08))
 }
 
@@ -69,7 +71,7 @@ public enum BrowseLayout {
   public static let suggestionIcon: CGFloat = 15
   public static let sheetAboveKeyboard: CGFloat = 304
   public static let trayFieldTop: CGFloat = 15
-  public static let trayDim: Double = 0.28
+  public static let trayDim: Double = 0.22
   public static let searchOpenResponse: Double = 0.3
   public static let searchWidenResponse: Double = 0.25
   public static let searchCloseResponse: Double = 0.3

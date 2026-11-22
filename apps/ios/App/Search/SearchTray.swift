@@ -82,18 +82,6 @@ struct SearchTray<Drag: Gesture>: View {
 
   private var sheetPanel: some View {
     panelColumn
-      .background(alignment: .top) {
-        sheetFill
-          .padding(.bottom, -BrowseLayout.sheetOverhang)
-          .allowsHitTesting(false)
-      }
-  }
-
-  private var sheetFill: some View {
-    let shape = UnevenRoundedRectangle(topLeadingRadius: BrowseLayout.sheetPanelRadius, topTrailingRadius: BrowseLayout.sheetPanelRadius, style: .continuous)
-    return shape
-      .fill(isIncognito ? SearchPanelPalette.incognitoFill : SearchPanelPalette.fill)
-      .overlay { shape.stroke(SearchPanelPalette.edge, lineWidth: 1 / max(displayScale, 1)) }
   }
 
   private var header: some View {
