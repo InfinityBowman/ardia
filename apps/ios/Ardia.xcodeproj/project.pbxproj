@@ -577,7 +577,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/Ardia-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = Ardia;
+				INFOPLIST_KEY_CFBundleDisplayName = "Ardia Fork";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Ardia uses the camera to scan the sync code your Mac shows, and for websites that ask to use it.";
@@ -719,7 +719,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/Ardia-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = Ardia;
+				INFOPLIST_KEY_CFBundleDisplayName = "Ardia Fork";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Ardia uses the camera to scan the sync code your Mac shows, and for websites that ask to use it.";
