@@ -1,6 +1,7 @@
 import ArdiaBrowser
 import ArdiaDesign
 import SwiftUI
+import UIKit
 
 struct BottomBar: View {
   enum Arrangement {
@@ -12,7 +13,6 @@ struct BottomBar: View {
   var arrangement = Arrangement.row
   var sideInset: CGFloat = 0
   var safeBottom: CGFloat = 0
-  var pageColor: Color?
   let actions: BarActions
 
   var body: some View {
@@ -39,38 +39,50 @@ struct BottomBar: View {
     }
     .frame(height: BrowseLayout.barControl)
     .padding(.horizontal, sideInset)
-    .padding(.bottom, safeBottom + BrowseLayout.barButtonLine - BrowseLayout.barControl / 2)
+    .padding(.bottom, BrowseLayout.barLine(safeBottom: safeBottom) - BrowseLayout.barControl / 2)
     .frame(maxWidth: .infinity)
     .background(alignment: .bottom) {
-      BarBand(height: BrowseLayout.barBand + safeBottom, pageColor: pageColor)
+      BarBand(height: BrowseLayout.barHeight(safeBottom: safeBottom))
     }
   }
 }
 
 struct BarBand: View {
   let height: CGFloat
-  let pageColor: Color?
+
+  @Environment(\.displayScale) private var displayScale
 
   var body: some View {
-    let line = BrowseLayout.barBand - BrowseLayout.barButtonLine
-    VStack(spacing: 0) {
-      LinearGradient(colors: [BrowsePalette.barBandTop.opacity(0), BrowsePalette.barFadeEdge], startPoint: .top, endPoint: .bottom)
-        .frame(height: BrowseLayout.barFade)
-      LinearGradient(
-        stops: [
-          .init(color: BrowsePalette.barBandTop, location: 0),
-          .init(color: BrowsePalette.barBandMiddle, location: line / height),
-          .init(color: BrowsePalette.barBandBottom, location: BrowseLayout.barBand / height),
-          .init(color: BrowsePalette.barBandBottom, location: 1),
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-      .background(pageColor ?? Color(.systemBackground))
-      .frame(height: height)
+    ZStack(alignment: .top) {
+      BarBackdropBlur()
+      LinearGradient(colors: [BrowsePalette.barBandTop, BrowsePalette.barBandBottom], startPoint: .top, endPoint: .bottom)
+      BrowsePalette.barBandEdge
+        .frame(height: 1 / max(displayScale, 1))
     }
+    .frame(height: height)
     .allowsHitTesting(false)
     .accessibilityHidden(true)
+  }
+}
+
+struct BarBackdropBlur: UIViewRepresentable {
+  func makeUIView(context: Context) -> BarBlurView { BarBlurView() }
+  func updateUIView(_ view: BarBlurView, context: Context) {}
+}
+
+final class BarBlurView: UIVisualEffectView {
+  init() {
+    super.init(effect: UIBlurEffect(style: .light))
+    isUserInteractionEnabled = false
+  }
+
+  required init?(coder: NSCoder) { nil }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    for subview in subviews where subview !== contentView && !String(describing: type(of: subview)).contains("Backdrop") {
+      subview.isHidden = true
+    }
   }
 }
 

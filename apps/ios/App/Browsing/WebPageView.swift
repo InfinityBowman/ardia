@@ -330,7 +330,7 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
     let id = page.id
     let bounds = webView.bounds
     let top = webView.safeAreaInsets.top + 1
-    let bottom = bounds.height - max(bottomInset, BrowseLayout.barBand) - ToneSampler.bandHeight - 2
+    let bottom = bounds.height - max(bottomInset, BrowseLayout.barHeight(safeBottom: 0)) - ToneSampler.bandHeight - 2
     Task { @MainActor [weak self, weak webView] in
       guard let webView else { return }
       async let topImage = Self.snapshot(of: webView, in: CGRect(x: 0, y: top, width: bounds.width, height: ToneSampler.bandHeight))

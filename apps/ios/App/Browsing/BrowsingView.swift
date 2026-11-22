@@ -261,7 +261,6 @@ struct BrowsingView: View {
       address: BarAddress(tab: app.tabs.selectedTab, page: currentWebPage),
       sideInset: pageSpan.safeSide,
       safeBottom: homeInset,
-      pageColor: tone?.bottom?.color,
       actions: barActions
     )
     .frame(height: height + BrowseLayout.barFade, alignment: .bottom)
@@ -269,7 +268,6 @@ struct BrowsingView: View {
     .environment(\.profileLook, look)
     .environment(\.usesGlass, usesGlass)
     .environment(\.screenLayout, screenLayout)
-    .environment(\.colorScheme, barScheme)
     barLink.onSwipeUp = { pager.landNow(); openSearch() }
     return PageBarHost(link: barLink, pager: pager, fade: BrowseLayout.barFade, content: content)
       .frame(height: height + BrowseLayout.barFade)
@@ -309,12 +307,6 @@ struct BrowsingView: View {
     guard ProcessInfo.processInfo.arguments.contains("-BrowseCollapsed") else { return }
     try? await Task.sleep(for: .seconds(MotionDemo.delay))
     barLink.hide()
-  }
-
-  @Environment(\.colorScheme) private var systemScheme
-
-  private var barScheme: ColorScheme {
-    tone?.bottom?.scheme ?? systemScheme
   }
 
   private func openSearch() {

@@ -113,6 +113,7 @@ struct BarPlusCapsule: View {
         .foregroundStyle(BrowsePalette.barGlyph)
         .frame(width: BrowseLayout.barPlus.width, height: BrowseLayout.barPlus.height)
         .background(BrowsePalette.barPlusFill, in: .capsule)
+        .overlay { Capsule().strokeBorder(BrowsePalette.barControlEdge, lineWidth: 0.5) }
         .frame(height: BrowseLayout.barControl)
         .contentShape(.capsule)
     }
@@ -132,6 +133,7 @@ struct BarPageMenuButton: View {
         .foregroundStyle(BrowsePalette.barGlyph)
         .frame(width: BrowseLayout.barCircle, height: BrowseLayout.barCircle)
         .background(BrowsePalette.barCircleFill, in: .circle)
+        .overlay { Circle().strokeBorder(BrowsePalette.barControlEdge, lineWidth: 0.5) }
         .frame(width: BrowseLayout.hitTarget, height: BrowseLayout.barControl)
         .contentShape(.rect)
     }

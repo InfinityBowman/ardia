@@ -7,7 +7,7 @@ per-frame host timestamps, input logs) is in `apps/ios/harness/runs/arc-ref/` (g
 downscaled stills here are in `shots/`.
 
 > **Caveats, read first**
-> - **Not checked against a real iPhone.** No iPhone recording of Arc was available for this pass.
+> - **§6 has a real iPhone recording (2026-11-22); where it differs, §6 wins.** Before it, no iPhone recording of Arc was available.
 > - Arc Search on iPad doesn't change layout with window width. Full screen (820 pt) shows the same
 >   single-column phone UI: the same three-slot bottom bar, + capsule and ^ circle (`runs/arc-ref/s00_start.png`).
 >   At 401 pt every control below has phone-sized metrics, so this is the iPhone layout. But two
@@ -496,3 +496,38 @@ full screen.
 In the third session I opened 16 Wikipedia test tabs and closed all of them (they're in the Archive
 too). The farewell and owner tabs were untouched, and Arc is back to full screen. No system prompt
 appeared.
+
+## 6. iPhone measurements (owner's recording, 2026-11-22)
+
+The owner's screen recording of an iPhone 17 Pro (1206 × 2622 px = 402 × 874 pt at 3×, 60 fps, 11.6 s,
+dark mode) shows Ardia Fork from 0 to ≈ 6.6 s and Arc Search from ≈ 7.4 s (frames 0–692; the iOS app
+switcher sits between them). Frame numbers below are the recording's own (`ffmpeg -fps_mode passthrough`,
+frame n at n/60 s). Where this section disagrees with §1–§2, this section wins: it is a real iPhone, with
+the status bar and the home indicator.
+
+### 6.1 Page bar (frames 590 white page, 660 #141316 page)
+
+| Item | iPhone | iPad (§1.1) |
+|---|---|---|
+| Button centre line | y **829.75**, i.e. **44.25 pt above the screen bottom**, 10.25 pt above the 34 pt home-indicator inset | 28.5 pt above the window bottom |
+| + capsule | y 809.7 → 849.7, x ≈ 162.3 → 239.1 (≈ 76 × 40 incl. a 1 px rim) | 75.5 × 39.5 |
+| ^ circle | y 812.7 → 846.7, centre x 360.7 (≈ 34 pt incl. rim) | 33.5 pt |
+| Band | top at y **797**, **77 pt** tall, to the screen bottom; the band top is 32.75 pt above the line | 52.5 pt, 24 pt above the line |
+| Top edge | a 1 px hairline: `#343336` over `#222124` (white ≈ 0.08) | no hairline |
+| Fade above the band | none (≤ 3 levels of shadow within 3 pt) | ≈ 25 pt fade |
+| Home indicator | y 861 → 865.7 | — |
+
+Band colour, sampled at x = 120 and 300 (grey average):
+
+| Page under the band | Band top (y 798–800) | Band bottom (y 870) | + capsule | Glyphs |
+|---|---|---|---|---|
+| White | `#6a6667` (104) | `#827375` (123) | ≈ +19 over the band (white ≈ 0.1) | white |
+| `#141316` | `#222124` (34) | `#201f22` (32) | `#383739` (+22) | white |
+
+- The band is a dark translucent material over the blurred page, in dark mode, whatever the page's
+  colour: on a white page it is mid grey with white glyphs, and the page's text shows through it
+  blurred. The page colour is not sampled, so nothing tints it.
+- Fitting both pages: a grey ≈ `#282828` at α ≈ 0.69 at the top and ≈ 0.58 at the bottom over the page.
+  Ardia reaches the same levels with a `.light` blur (its backdrop maps page level p to ≈ 0.74 p + 35 on
+  iOS 27.2) under `#171717` at 0.60 → `#0D0D0D` at 0.48: 104 → 123 on white, 33 → 32 on `#141316`.
+- Light mode was not recorded.

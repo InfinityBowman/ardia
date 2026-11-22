@@ -351,16 +351,12 @@ struct TabDeck: View {
   private var pageBarStandIn: some View {
     let tab = app.tabs.selectedTab
     let page = app.currentPage
-    let bottom = tab.flatMap { app.browse.tone(for: $0, page: page).bottom }
-    let scheme = bottom?.scheme
     return BottomBar(
       address: BarAddress(tab: tab, page: page),
       sideInset: base.safeSide,
       safeBottom: base.safeBottom,
-      pageColor: bottom?.color,
       actions: BarActions(onTabs: {}, onAddress: {}, onPlus: {}, onMore: {}, onExpand: {}, onStep: { _ in }, onSelectTab: { _ in }, onCloseTab: {})
     )
-    .modifier(OptionalColorScheme(scheme: scheme))
     .allowsHitTesting(false)
     .accessibilityHidden(true)
   }

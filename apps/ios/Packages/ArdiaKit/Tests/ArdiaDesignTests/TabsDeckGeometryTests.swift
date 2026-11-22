@@ -30,7 +30,7 @@ struct TabsDeckGeometryTests {
 
   @Test func `the bar sits above the home indicator`() {
     let phone = TabsDeckGeometry(container: CGSize(width: 402, height: 874), safeTop: 62, safeBottom: 34)
-    #expect(abs(phone.barCenterY - 811.5) < 0.5)
+    #expect(abs(phone.barCenterY - 829.75) < 0.5)
     #expect(phone.cardCenterY + phone.cardSize.height / 2 < phone.barCenterY - TabsDeckGeometry.barCircle / 2)
     #expect(phone.cardCenterY - phone.cardSize.height / 2 - TabsDeckGeometry.headerAboveCard >= phone.safeTop)
   }

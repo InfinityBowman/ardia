@@ -36,12 +36,12 @@ public enum BrowsePalette {
   public static let notSecure = Color.adaptive(light: Color(hex: 0xF7931E), dark: Color(hex: 0xFF9F0A))
   public static let searchField = Color.adaptive(light: .white, dark: .white.opacity(0.12))
   public static let classicBarShadow = Color.adaptive(light: .black.opacity(0.12), dark: .black.opacity(0.4))
-  public static let barBandTop = Color(hex: 0x9D9D9D, opacity: 0.265)
-  public static let barBandMiddle = Color(hex: 0x8F8F8F, opacity: 0.374)
-  public static let barBandBottom = Color(hex: 0x888888, opacity: 0.47)
-  public static let barFadeEdge = Color(hex: 0x9D9D9D, opacity: 0.14)
-  public static let barPlusFill = Color(hex: 0x898989, opacity: 0.31)
-  public static let barCircleFill = Color(hex: 0x8C8C8C, opacity: 0.25)
+  public static let barBandTop = Color.adaptive(light: Color(hex: 0x9D9D9D, opacity: 0), dark: Color(hex: 0x171717, opacity: 0.6))
+  public static let barBandBottom = Color.adaptive(light: Color(hex: 0x888888, opacity: 0.28), dark: Color(hex: 0x0D0D0D, opacity: 0.48))
+  public static let barBandEdge = Color.adaptive(light: .clear, dark: .white.opacity(0.08))
+  public static let barPlusFill = Color.adaptive(light: Color(hex: 0x898989, opacity: 0.31), dark: .white.opacity(0.1))
+  public static let barCircleFill = Color.adaptive(light: Color(hex: 0x8C8C8C, opacity: 0.25), dark: .white.opacity(0.095))
+  public static let barControlEdge = Color.adaptive(light: .clear, dark: .white.opacity(0.12))
   public static let barGlyph = Color.adaptive(light: Color(hex: 0x2F2F2F), dark: .white)
 }
 
@@ -74,9 +74,11 @@ public enum BrowseLayout {
   public static let tabStackFrontTilt: Double = 8
   public static let tabStackBackTilt: Double = -18
   public static let tabsButtonWidth: CGFloat = 64
-  public static let barBand: CGFloat = 52.5
-  public static let barButtonLine: CGFloat = 28.5
-  public static let barFade: CGFloat = 25
+  public static let barLineAboveHomeIndicator: CGFloat = 10.25
+  public static let barLineWithoutHomeIndicator: CGFloat = 28.5
+  public static let barBandAboveLine: CGFloat = 32.75
+  public static let barBandAboveLineWithoutHomeIndicator: CGFloat = 24
+  public static let barFade: CGFloat = 0
   public static let barPlus = CGSize(width: 75.5, height: 39.5)
   public static let barCircle: CGFloat = 33.5
   public static let barSide: CGFloat = 23.5
@@ -84,7 +86,13 @@ public enum BrowseLayout {
   public static let barChevronGlyph: CGFloat = 15
   public static let hitTarget: CGFloat = 44
 
-  public static func barHeight(safeBottom: CGFloat) -> CGFloat { safeBottom + barBand }
+  public static func barLine(safeBottom: CGFloat) -> CGFloat {
+    max(safeBottom + barLineAboveHomeIndicator, barLineWithoutHomeIndicator)
+  }
+
+  public static func barHeight(safeBottom: CGFloat) -> CGFloat {
+    barLine(safeBottom: safeBottom) + (safeBottom > 0 ? barBandAboveLine : barBandAboveLineWithoutHomeIndicator)
+  }
   public static let progressHeight: CGFloat = 2.5
   public static let toolbarTile: CGFloat = 78
 }
