@@ -156,9 +156,12 @@ public struct TabsDeckGeometry: Equatable, Sendable {
     return min(max(shifted, 0), remaining - 1)
   }
 
+  public static let closeDistance: CGFloat = 150
+  public static let closeProjection: CGFloat = 0.3
+
   public static func shouldClose(translation: CGFloat, velocity: CGFloat, cardHeight: CGFloat) -> Bool {
     guard translation < 0 else { return false }
-    if velocity < -500 { return true }
-    return -translation > cardHeight / 3 && velocity < 250
+    let projected = -translation - velocity * closeProjection
+    return projected >= closeDistance
   }
 }

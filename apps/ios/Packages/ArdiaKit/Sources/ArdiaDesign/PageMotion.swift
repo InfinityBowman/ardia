@@ -103,7 +103,7 @@ public enum PagerPhysics {
   public static let recededScale: CGFloat = 0.92
   public static let recededDim = 0.32
   public static let edgeScale: CGFloat = 0.03
-  public static let projectionTime: CGFloat = 0.12
+  public static let projectionTime: CGFloat = 0.3
   public static let commitFraction: CGFloat = 0.5
   public static let opposingVelocity: CGFloat = 240
 

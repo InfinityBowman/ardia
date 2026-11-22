@@ -107,7 +107,8 @@ public extension Motion {
   static let progressRevealDelay: Duration = .milliseconds(150)
   static let placeholderDelay: Duration = .milliseconds(300)
   static let placeholderIn = Animation.easeOut(duration: 0.22)
-  static let pagerSettle = Spring(duration: 0.38, bounce: 0)
+  static let pagerCommit = Spring(response: 0.24, dampingRatio: 1)
+  static let pagerSnapBack = Spring(response: 0.2, dampingRatio: 1)
   static let pagerFade = Animation.easeOut(duration: 0.2)
   static let barTone = Animation.easeOut(duration: 0.25)
   static let logoSpinDecay: Double = 2.2

@@ -367,7 +367,7 @@ final class TabPager: NSObject {
     if reduceMotion {
       animator = UIViewPropertyAnimator(duration: 0.2, curve: .easeOut)
     } else {
-      let response = Motion.pagerSettle.response
+      let response = target != 0 ? Motion.pagerCommit.response : Motion.pagerSnapBack.response
       let relative = abs(distance) > 0.5 ? releaseVelocity / distance : 0
       animator = UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: response, velocity: relative))
       visualEnd = Self.settleTime(distance: distance, velocity: releaseVelocity, response: response)

@@ -290,7 +290,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       stopTransition()
       phase = .returning(id)
       setPageBar(true)
-      runHome(to: id, duration: Self.returnDuration)
+      runHome(to: id, duration: Self.returnDuration, timing: Self.returnCurve)
       commitNow()
       return
     }
@@ -307,7 +307,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     if let card = cards[id], !card.isShowingLive, !card.hasImage {
       card.setImage(coverImage(for: id))
     }
-    runHome(to: id, duration: Self.landingDuration)
+    runHome(to: id, duration: Self.landingDuration, timing: Self.landingCurve)
     commitNow()
     app.beginOpening(id)
   }
@@ -321,9 +321,9 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     commitNow()
   }
 
-  private func runHome(to id: UUID, duration: TimeInterval) {
+  private func runHome(to id: UUID, duration: TimeInterval, timing: UICubicTimingParameters) {
     let generation = beginTransitions()
-    let animator = UIViewPropertyAnimator(duration: duration, timingParameters: Self.landing)
+    let animator = UIViewPropertyAnimator(duration: duration, timingParameters: timing)
     animator.isInterruptible = true
     animator.addAnimations {
       self.layoutCards(progress: 0)
@@ -343,11 +343,12 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     animator.startAnimation()
   }
 
-  private static let openResponse: Double = 0.26
-  private static let flyResponse: Double = 0.26
+  private static let openResponse: Double = 0.19
+  private static let flyResponse: Double = 0.28
   private static let landingDuration: TimeInterval = 0.34
-  private static let returnDuration: TimeInterval = 0.28
-  private static let landing = UICubicTimingParameters(controlPoint1: CGPoint(x: 0.2, y: 0.8), controlPoint2: CGPoint(x: 0.2, y: 1))
+  private static let landingCurve = UICubicTimingParameters(controlPoint1: CGPoint(x: 0.325, y: 0.525), controlPoint2: CGPoint(x: 0.1, y: 1))
+  private static let returnDuration: TimeInterval = 0.3
+  private static let returnCurve = UICubicTimingParameters(controlPoint1: CGPoint(x: 0.3, y: 0.4), controlPoint2: CGPoint(x: 0.175, y: 1))
 
   private func finishClosing(on id: UUID) {
     HarnessProbe.mark("deck.closed")
@@ -786,36 +787,45 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
   }
 
   private func close(_ id: UUID, animated: Bool, velocity: CGFloat = 0) {
-    guard order.contains(id) else { return }
-    let remove = { [weak self] in
-      guard let self, let index = self.order.firstIndex(of: id) else { return }
-      let focus = TabsDeckGeometry.scrollAfterRemoving(index: index, scroll: Int(self.scroll.rounded()), remaining: self.order.count - 1)
-      self.order.remove(at: index)
-      self.scroll = Double(focus)
-      self.cards[id]?.removeFromSuperview()
-      self.headers[id]?.removeFromSuperview()
-      self.cards[id] = nil
-      self.headers[id] = nil
-      self.lifts[id] = nil
-      self.headerTucks[id] = nil
-      self.stage.isEmpty = self.order.isEmpty
-      UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: 0.36)).run { self.layoutCards() }
-      self.app.closeTab(id)
-    }
-    guard animated, !UIAccessibility.isReduceMotionEnabled, let card = cards[id] else {
-      remove()
+    guard let index = order.firstIndex(of: id) else { return }
+    let card = cards[id]
+    let header = headers[id]
+    let focus = TabsDeckGeometry.scrollAfterRemoving(index: index, scroll: Int(scroll.rounded()), remaining: order.count - 1)
+    order.remove(at: index)
+    scroll = Double(focus)
+    cards[id] = nil
+    headers[id] = nil
+    lifts[id] = nil
+    headerTucks[id] = nil
+    stage.isEmpty = order.isEmpty
+    app.closeTab(id)
+    guard animated, !UIAccessibility.isReduceMotionEnabled, let card else {
+      card?.removeFromSuperview()
+      header?.removeFromSuperview()
+      UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: Self.gapResponse)).run { self.layoutCards() }
       return
     }
-    let lift = (lifts[id] ?? 0) - geometry.cardSize.height * 0.18
-    UIView.animate(withDuration: TabsMotion.flyAway, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
-      card.center.y += lift - (self.lifts[id] ?? 0)
-      card.transform = card.transform.scaledBy(x: 0.72, y: 0.72)
-      card.alpha = 0
-      self.headers[id]?.alpha = 0
-    } completion: { _ in remove() }
+    let travel = card.frame.maxY + 20
+    let speed = max(-velocity, travel / Self.throwDuration)
+    let throwDuration = TimeInterval(min(travel / speed, Self.throwDuration))
+    UIView.animate(withDuration: throwDuration, delay: 0, options: [.curveLinear, .allowUserInteraction, .beginFromCurrentState]) {
+      card.center.y -= travel
+      header?.center.y -= travel
+      header?.alpha = 0
+    } completion: { _ in
+      card.removeFromSuperview()
+      header?.removeFromSuperview()
+    }
+    let gap = UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: Self.gapResponse))
+    gap.isInterruptible = true
+    gap.addAnimations { self.layoutCards() }
+    gap.startAnimation(afterDelay: Self.gapDelay)
   }
 
-  private static let liftReturnResponse: Double = 0.3
+  private static let gapResponse: Double = 0.205
+  private static let liftReturnResponse: Double = 0.2
+  private static let gapDelay: TimeInterval = 0.03
+  private static let throwDuration: CGFloat = 0.2
 
   private func observeModel() {
     guard !observing else { return }

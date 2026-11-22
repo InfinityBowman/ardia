@@ -84,11 +84,13 @@ struct TabsDeckGeometryTests {
     #expect(TabsDeckGeometry.scrollAfterRemoving(index: 0, scroll: 0, remaining: 0) == 0)
   }
 
-  @Test func `a card closes on a flick or a long drag, never on a drag down`() {
+  @Test func `a card closes by where Arc's release would carry it, never on a drag down`() {
     let height = geometry.cardSize.height
-    #expect(TabsDeckGeometry.shouldClose(translation: -40, velocity: -900, cardHeight: height))
-    #expect(TabsDeckGeometry.shouldClose(translation: -height / 2, velocity: 0, cardHeight: height))
-    #expect(!TabsDeckGeometry.shouldClose(translation: -60, velocity: -100, cardHeight: height))
+    #expect(!TabsDeckGeometry.shouldClose(translation: -136, velocity: 0, cardHeight: height))
+    #expect(TabsDeckGeometry.shouldClose(translation: -10, velocity: -500, cardHeight: height))
+    #expect(TabsDeckGeometry.shouldClose(translation: -130, velocity: -130, cardHeight: height))
+    #expect(!TabsDeckGeometry.shouldClose(translation: -100, velocity: -100, cardHeight: height))
+    #expect(!TabsDeckGeometry.shouldClose(translation: -88, velocity: 500, cardHeight: height))
     #expect(!TabsDeckGeometry.shouldClose(translation: 120, velocity: 900, cardHeight: height))
   }
 

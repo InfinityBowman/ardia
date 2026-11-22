@@ -86,6 +86,13 @@ struct PagerPhysicsTests {
     #expect(PagerPhysics.snapTarget(offset: 220, velocity: 0, width: width, hasLeft: true, hasRight: true) == 1)
   }
 
+  @Test func releaseSpeedDecidesLikeArc() {
+    #expect(PagerPhysics.snapTarget(offset: 60, velocity: 510, width: 402, hasLeft: true, hasRight: true) == 1)
+    #expect(PagerPhysics.snapTarget(offset: 33, velocity: 510, width: 402, hasLeft: true, hasRight: true) == 0)
+    #expect(PagerPhysics.snapTarget(offset: 107, velocity: 0, width: 402, hasLeft: true, hasRight: true) == 0)
+    #expect(PagerPhysics.snapTarget(offset: 88, velocity: -500, width: 402, hasLeft: true, hasRight: true) == 0)
+  }
+
   @Test func shortFlickCommitsByProjection() {
     #expect(PagerPhysics.snapTarget(offset: -60, velocity: -1600, width: width, hasLeft: true, hasRight: true) == -1)
   }
