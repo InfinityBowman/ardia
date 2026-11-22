@@ -543,3 +543,21 @@ Band colour, sampled at x = 120 and 300 (grey average):
 | Vertical rule | the favicon row (card top − 28 = 139.3) is 77.3 pt below the status bar (62) and the card bottom is 75.3 pt above the + capsule's top (810): the header-plus-card block is centred between the two | centred on the window |
 | Press feedback | the pressed card's top moves 167.3 → 168.7 and its bottom 734.7 → 733.4 (frame 624, the frame before the zoom) | ≈ 0.5 % |
 | Switcher bar | the same line as the page bar: + capsule y 809.7 → 849.7 (centre 829.75), monitor circle centre (40.7, 829.7), fills `#353040`/`#343443` on `#1f1a28` | 850 |
+
+### 6.3 Opening a card that isn't the newest (frames 624–651; Ardia's old behaviour at frames 33–55)
+
+- Frame 624 is the touch-down (press feedback), 625 the first frame of the zoom. The tapped card (Mocks,
+  the n−1 card) **stays on top of every other card** and zooms in place.
+- The deck spreads apart around it: the newer card (the white current tab at x 309) slides **right**, off
+  the screen by frame 628 (≈ 50 ms), and the older cards slide **left** off the screen. No card flies into
+  the tabs button and nothing crosses the tapped card.
+- The switcher bar keeps its icons for ≈ 3 frames, then the page bar's icons cross-fade in. The tabs
+  button's two thumbnails (the old newest tab in front, the one before it behind) **rise from below the
+  screen**: first visible at frame 630, at rest at frame 642. Their centre falls 14.2, 9.5, 6.0, 3.6, 2.0,
+  1.1, 0.5 pt short of rest on frames 634–640: a critically damped spring, **response ≈ 0.19 s**, starting
+  **≈ 71 pt below rest** at ≈ 58 ms after the zoom's first frame (fit rms 0.4 pt). x and tilt don't change.
+- Tapping the newest card instead (frames 497–507): the zoomed card is on top while it is large, and the
+  n−1 card (and n−2) shrink into the tabs button's front (and back) thumbnail, drawn over the page once
+  they are small, at rest by ≈ frame 507 (≈ 170 ms).
+- Ardia before this round: every other card flew to the tabs button above the tapped card, so the newest
+  card crossed in front of it (frames 34–40).

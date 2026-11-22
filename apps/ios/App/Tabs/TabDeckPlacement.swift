@@ -97,7 +97,7 @@ nonisolated struct DeckPose {
       dim *= scaleT
       opacity = min(1, max(0, motion.scaleProgress) * 5)
     case .slideLeft:
-      center.x -= (1 - positionT) * geometry.container.width * 0.7
+      center.x -= (1 - positionT) * geometry.container.width
     case .slideRight:
       center.x += (1 - positionT) * geometry.container.width
     }

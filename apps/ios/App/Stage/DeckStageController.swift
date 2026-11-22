@@ -458,8 +458,10 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     case .returning(let expanded):
       return launchRole(for: id, at: index, expanded: expanded)
     case .closing(let expanded):
-      guard order.contains(expanded) else { return .stay }
-      return id == expanded ? .expanded : .launcher
+      guard let expandedIndex = order.firstIndex(of: expanded) else { return .stay }
+      if id == expanded { return .expanded }
+      if expandedIndex == order.count - 1 { return .launcher }
+      return index < expandedIndex ? .slideLeft : .slideRight
     }
   }
 
