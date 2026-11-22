@@ -628,27 +628,75 @@ white Wikipedia page:
 - light mode (switched with `axe settings set --appearance light`, then back to dark): a near-white material,
   `#F4F4F5` at the top to `#E9E9EA` lower down, field `#D1D2D2`, placeholder ≈ `#737374`, row titles ≈ `#171717`.
 
+**Over a white page with the system keyboard** (owner's fourth recording, `rec4/arc-white.mp4`, 2026-11-22,
+iPhone 17 Pro, 1206 × 2622 px, 60 fps, 17.5 s, dark mode, apple.com's iPhone page; search opens and closes
+at 0.3–2.0 s and 4.3–4.7 s, the page menu from 6.2 s, the address row tapped at ≈ 13.5 s). This recording
+beats the iPad numbers for the iPhone.
+
+| Item | Measured |
+|---|---|
+| Page | dimmed 22.6 % (243 → 188, 255 → 197) and receding into the card (§6.5 above) |
+| Panel | a translucent dark material, ≈ (96–101, 93–98, 97–99) over the page's `#F3F2F5`, with the page's colours smeared through a heavy blur. One model fits both recordings: the blurred, dimmed page under `#2B2A2D` at ≈ 0.63 (it gives ≈ 97 over the white page and `#212023` over a near-black one) |
+| Field | ≈ 117–124 over that panel: white ≈ 0.12 on the material (over the dark page it reads `#3A393C`); 1 px edge white ≈ 0.17 |
+| Text | "Search…" white ≈ 0.51, titles white, globe glyph white ≈ 0.8, mic and eyes white ≈ 0.5, top hairline white ≈ 0.24 |
+| Keyboard | the system keyboard in dark appearance |
+| Close (frames 50–66 at 30 fps; 60 fps from 1.55 s) | within 1–2 frames (≤ 33 ms) of the first move the dark material gives way to the bar's light band, which then sinks as the bar: the tabs button, + capsule and ^ sit on its top row by ≈ 83 ms, the field narrows into the + capsule with "Search…" faded, the rows ghost out by ≈ 100 ms, and the page's dim is gone by ≈ 50 ms. The system keyboard slides down underneath over ≈ 0.3 s |
+
+Wispr's keyboard vanishing in one frame on close (the owner's 2026-11-22 recording of Ardia, ≈ 3.4 s) is Wispr's
+own behaviour: Arc's close in the earlier recording shows the same one-frame vanish (above), and with the
+system keyboard both apps get the system's slide.
+
 **Ardia now** (`App/Search/KeyboardRider.swift`, `SearchTray.swift`, `SuggestionRowView.swift`):
 - Tap +: the panel rises on its own critically damped spring (response 0.30 s) from the bar to where the
-  keyboard will end (the last keyboard height, kept in `searchPanel.keyboardLift`; 336 pt before the first
-  keyboard), retargets on the keyboard's will-change notification and follows later keyboard changes on
-  the keyboard's own curve. A UIKit capsule (field fill, 1 px edge, + glyph, "Search…" or the reopened text,
-  caret, mic and eyes at the field's final offsets from its left edge) widens from the + capsule into the
-  field on a 0.25 s spring, clipped to its own shape; the + fades after 40 ms over 80 ms and the text slides
-  from 21.5 pt right of it to 23 pt inside. A cover in the panel colour hides the real field until the
-  capsule hands over at 300 ms (80 ms fade), or at once on the first keystroke. The panel body fades in over
-  100 ms so the bar's band doesn't snap. The field still focuses in the same pass as before.
+  keyboard will end, and holds there until the keyboard reports a real frame. The target is the last height a
+  keyboard settled at (`searchPanel.keyboardLift`, written once per close; 336 pt before any keyboard has
+  been seen). A frame taller than 120 pt retargets the spring at once. A smaller frame (a hardware keyboard's
+  bar) is accepted only if nothing taller follows within 0.3 s. Hides are ignored while waiting, and the wait
+  gives up after 3 s. Once the keyboard has arrived the panel follows later frames on the keyboard's own curve,
+  or on the 0.30 s spring when a frame comes with no duration (third-party keyboards send several of those).
+  A hide while the field is still editing (a keyboard switch) holds the panel for 0.6 s before it drops.
+  Before this, a 0.45 s timeout dropped the panel to the bottom while Wispr was still launching (it took
+  ≈ 2 s on a cold start) and stored that bottom as the next open's target.
+- A UIKit capsule (field fill, 1 px edge, + glyph, "Search…" or the reopened text, caret, mic and eyes at the
+  field's final offsets from its left edge) widens from the + capsule into the field on a 0.25 s spring,
+  clipped to its own shape; it starts as the bar's + tile and crossfades to the field over 0.1 s, the + fades
+  after 40 ms over 80 ms, and the text slides from 21.5 pt right of it to 23 pt inside. The real field is
+  hidden by a mask on the panel's content (no longer a cover in the panel colour, which would show on a
+  translucent panel) until the capsule hands over at 300 ms (80 ms fade), or at once on the first keystroke.
 - The tabs button and ^ are a live, non-interactive copy of the bar's (`BottomBar(iconsOnly:)`) on the
-  panel's top row: they ride up with it and fade over 0.2 s on open; on close they ride down and fade in
-  from 100 to 250 ms, and the panel body fades out from 360 to 440 ms onto the real bar, once the panel is
-  within ≈ 2 pt of it (earlier, the copy and the real icons showed doubled).
-- Close: the panel sinks into the band and the field shrinks into the + capsule on 0.30 s springs, the +
-  returning after 80 ms. Every delayed fade is a keyframe animation, so it runs on the render server.
-- Look: solid `#212023` in dark mode (the owner's call: Arc's look over dark pages, on every page), and
-  Arc's light-mode colours (`#F0F0F1`, field `#D1D2D2`, text `#171717`) in light mode; Incognito keeps
-  `#151517`. Rows: favicon (globe while missing) for tabs, history and bookmarks; globe for a typed URL;
-  magnifier for searches; 22 pt icons at x 18–40, titles at x 49; the typed prefix bright and the
-  completion dimmer (§1.3). Panel height above the keyboard 304 pt.
+  panel's top row: they ride up with it and fade over 0.2 s on open.
+- Close, when a page bar is underneath: the panel sinks on the 0.30 s spring, and within 35 ms its dark
+  material crossfades to a copy of the bar's band (blur, gradient and edge) while the capsule's field skin
+  turns back into the + tile. "Search…" fades in 60 ms, the rows fade over 100 ms, the tabs button and ^ come
+  in from 20 to 80 ms, and the dim clears over 120 ms. The riser lands exactly on the real bar and hides at
+  450 ms. Before, the dark panel and a clipped "+ Sea" capsule lingered on the bar line for ≈ 100 ms. With
+  no bar underneath (the start page), the panel fades from 360 to 440 ms as before, with "Search…" faded out.
+- Look (dark appearance): the panel is drawn in UIKit under the SwiftUI rows: a pure backdrop blur (the bar's
+  `BarBlurView`) under `#2B2A2D` at 0.63, with a 1 px white 0.24 edge and 30 pt top corners. Field white
+  0.12, placeholder white 0.51, glyphs white 0.8, mic and eyes white 0.5. The page dim is 0.22. Measured in
+  the simulator over a white page: panel (98, 98, 101), field (117, 117, 119), dimmed page 196 from 252. Over
+  a `#141316` page: panel (34, 33, 36), field (61, 59, 61). Light appearance keeps the iPad's light-mode
+  solid colours (`#F0F0F1`, field `#D1D2D2`, text `#171717`). Incognito keeps `#151517`, and Reduce
+  Transparency gets solid `#212023`.
+- The page no longer moves when search opens or closes. Cause: WKWebView observes every
+  `UIKeyboardDidChangeFrameNotification` in the app and applies the keyboard's frame to the page's visual
+  viewport even when the keyboard belongs to a native field (its will-show and will-change handlers check
+  for a focused element; the did-change one doesn't). So a page saw `visualViewport` shrink by the
+  keyboard's height (735 → 511 in a probe page) on every search open and grow back on close. Sites that lay
+  out from the visual viewport (apple.com flips its ribbon and hero) relaid out each time, and a page loaded
+  from search while the keyboard was still reported laid out short, then reflowed once it went. The page's
+  web view now unsubscribes from that one notification (`FindReportingWebView`): the probe page's viewport
+  stays at 735 through search, and focusing a field on the page still shrinks it to 381 and scrolls the
+  field into view.
+- `-ArdiaKeyboardReplay "h@t[:d],…"` (with `-ArdiaProbe`) replaces the keyboard for the omnibox with
+  scripted frames: height `h` (0 hides) at `t` s after the field starts editing, animated over `d` s
+  (default 0.25), drawn as a grey stand-in. `-ArdiaKeyboardHide <d>` sets the hide's duration on close.
+  Results on 2026-11-22 (tracked panel top, 60 fps):
+  - late keyboard (`0@0.05:0,301@2.0:0`): the panel rises once and doesn't move when the frame lands at 2 s;
+  - height change part-way (`260@0.1:0.25,320@0.25:0`): one smooth rise, retargeted mid-flight;
+  - a second change (`301@0.1,250@1.0:0,301@1.6`): the panel follows down 51 pt and back on the spring;
+  - a small bar only (`55@0.1:0`): settles 0.3 s later just above the bar;
+  - a switch (`301@0.1,0@1.0:0,301@1.3:0`): no movement.
 - Not built: the swipe-up drag that follows the finger (Ardia's bar still rubber-bands up to 60 pt and
   opens on release), and the page receding into a card.
 
@@ -690,6 +738,39 @@ white Wikipedia page:
 - The address row now sits 16 pt below the panel top, as Arc's (it was 50 pt: the menu's scroll view
   counted a 34 pt top content inset, the bottom safe area, into its height, so the panel grew by 34 pt
   above its content, and its closed pose left the address row 34 pt below the bar line).
+
+- **iPhone, over a white page** (`rec4/arc-white.mp4` from 6.0 s; 60 fps tracking of the panel top):
+  - open: a critically damped spring, response ≈ 0.22 s, rest top 276 pt with Display Options expanded and
+    472 pt collapsed;
+  - close: ≈ 0.23 s, critically damped. The address row shrinks into the + capsule, the contents are gone by
+    ≈ 67 ms, the tabs button and ^ sit on the panel's top row by ≈ 60 ms, and the dim clears in ≈ 2 frames;
+  - Display Options expands in place with a chevron that turns from right to down (expand ≈ 0.28 s,
+    collapse ≈ 0.30 s, both critically damped, the panel top moving 194–196 pt), and stays as it was left
+    across opens (the recording's first open is already expanded, and the open at 13 s collapsed);
+  - material: a heavy blur of the **undimmed** page with a faint grey tint (`#F3F2F5` page → 235–242,
+    a (211, 225, 241) patch → (213, 226, 240)); the page outside the panel is dimmed 22.6 %;
+  - groups are translucent too: rows ≈ black 0.15 over the material (200–210, the page's hue still
+    showing), tiles ≈ 0.13, the address row ≈ 0.11, with 1 pt full-width separators of white ≈ 0.45 between
+    an expanded group's rows;
+  - layout: tiles 80 × 80 with labels below (Find on Page, Summarize, Pin, Share); expanded rows 48.7 pt
+    apart (single rows 47.3), radius 16, groups 17 pt apart, icon centre 30 pt and title 52 pt from the
+    row's left; Display Options holds Translate, Reader Mode, Page Zoom (a −|+ control, 88 × 31 pt,
+    radius ≈ 8) and Request Desktop Site; then Site Settings, and a 55 pt "Arc scrubbed 1 tracker /
+    Problems? Tap to restore original page" block;
+  - tapping the address row opens search with the full URL ("https://www.apple.com/") selected and a clear
+    button.
+- Ardia (this round): the panel's material is the bar's pure blur under a faint tint (light `#E4E4E6` at
+  0.3, dark `#1E1D1F` at 0.8), and the dim (0.22) now stops at the panel's top, so the panel blurs the
+  undimmed page. Reduce Transparency keeps the solid fills. Address row, tiles and rows are translucent (black
+  0.11 / 0.13 / 0.15 in light, white 0.14 / 0.11 / 0.15 in dark), and rows in a group are split by 1 pt
+  full-width white separators (0.45 light, 0.1 dark). Display Options remembers whether it was open
+  (`pageMenu.displayOptionsExpanded`), expands on a 0.30 s critically damped spring, and lists Translate,
+  Night Shade (where Arc has Reader Mode, which is a tile here), Page Zoom and Request Desktop Site. The zoom
+  control keeps its reset percentage, now in an 8 pt rounded rectangle. Closing runs on a 0.22 s spring
+  (was 0.12 s), and the tiles and groups fade with the rise (gone below 45 % of it, ≈ 65 ms into a close),
+  while the address row shrinks into the + capsule. Tapping the address row already opened search with the
+  full URL selected, as Arc does. Download Video, Block Ads and Trackers and More stay where they are, since
+  Ardia has no Summarize or Pin. Not copied: the tabs button and ^ riding on the closing panel's top row.
 
 ### 6.7 Turning back to the switcher while an older card lands (iPad `s2` r3/r5, `v-tabs-during-zoom.jpg`)
 
