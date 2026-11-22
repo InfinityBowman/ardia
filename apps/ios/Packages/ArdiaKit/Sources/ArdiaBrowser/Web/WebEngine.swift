@@ -22,6 +22,7 @@ public final class WebEngine {
   @ObservationIgnored private var notificationTasks: [Task<Void, Never>] = []
 
   @ObservationIgnored public var openUniversalLink: (@MainActor (URL) async -> Bool)?
+  @ObservationIgnored public var onVideoRequest: (@MainActor (WebTab, VideoScan, DetectedVideo?) -> Void)?
   @ObservationIgnored public var omnibox: Omnibox?
   @ObservationIgnored private let pageScriptControllers = NSHashTable<WKUserContentController>.weakObjects()
   @ObservationIgnored private var sharedPrivateDataStore: WKWebsiteDataStore?

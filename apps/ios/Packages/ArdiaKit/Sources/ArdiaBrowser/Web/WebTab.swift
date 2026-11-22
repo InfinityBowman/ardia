@@ -60,6 +60,8 @@ public final class WebTab: DiscardablePage, Identifiable {
   @ObservationIgnored private var pendingURL: URL?
   @ObservationIgnored private var swipeSnapshots: [ObjectIdentifier: UIImage] = [:]
   @ObservationIgnored private var swipeSnapshotOrder: [ObjectIdentifier] = []
+  @ObservationIgnored var videoFrames: [WKFrameInfo] = []
+  @ObservationIgnored var videoPress: VideoPressHandler?
 
   init(id: UUID, engine: WebEngine, url: URL?, popupConfiguration: WKWebViewConfiguration? = nil) {
     self.id = id
@@ -211,6 +213,7 @@ public final class WebTab: DiscardablePage, Identifiable {
     engine.blocker.install(on: configuration.userContentController, counter: blockedResources)
     engine.installPageScripts(on: configuration.userContentController)
     self.webView = webView
+    videoPress = VideoPressHandler(tab: self, webView: webView)
     observe(webView)
     let stored = engine.tabs.tab(id)
     if let zoom = engine.preferences.settings(for: host, isPrivate: isPrivate).pageZoom {
@@ -248,6 +251,9 @@ public final class WebTab: DiscardablePage, Identifiable {
     request?.dismiss()
     request = nil
     coordinator = nil
+    videoPress?.detach()
+    videoPress = nil
+    videoFrames = []
     self.webView = nil
     isLoading = false
     progress = 0
@@ -359,7 +365,11 @@ public final class WebTab: DiscardablePage, Identifiable {
     case .web:
       break
     }
+    if !isMainFrame, let frame = action.targetFrame {
+      noteVideoFrame(frame)
+    }
     if isMainFrame, action.targetFrame != nil {
+      videoFrames = []
       pendingNavigationType = action.navigationType
       if action.navigationType != .reload { rememberSwipeSnapshot() }
       let targetHost = BrowserURL.host(of: target.absoluteString)
@@ -695,6 +705,13 @@ final class WebTabCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, UIS
   func webView(_ webView: WKWebView, contextMenuConfigurationFor elementInfo: WKContextMenuElementInfo) async -> UIContextMenuConfiguration? {
     guard let tab, let engine = tab.engine, let link = elementInfo.linkURL, ExternalLinks.route(link) == .web else { return nil }
     let tabID = tab.id
+    let pressedVideo = await tab.videoPress?.pressedVideo()
+    let videoAction = pressedVideo.map { press in
+      UIAction(title: String(localized: "Download Video"), image: UIImage(systemName: "arrow.down.to.line.circle")) { [weak tab] _ in
+        guard let tab else { return }
+        tab.engine?.onVideoRequest?(tab, press.scan, press.video)
+      }
+    }
     return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak engine] suggested in
       let open = UIMenu(options: .displayInline, children: [
         UIAction(title: String(localized: "Open in New Tab"), image: UIImage(systemName: "plus.square.on.square")) { _ in
@@ -714,7 +731,7 @@ final class WebTabCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate, UIS
         UIAction(title: String(localized: "Download Linked File"), image: UIImage(systemName: "arrow.down.circle")) { _ in
           engine?.download(link, from: tabID)
         },
-      ])
+      ] + (videoAction.map { [$0] } ?? []))
       let duplicates = ["open", "copy link", "share", "reading list", "hide link preview", "show link preview"]
       let extra = suggested.filter { element in
         let title = element.title.lowercased()
