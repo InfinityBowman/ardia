@@ -34,6 +34,7 @@ final class HarnessProbe {
     FileManager.default.createFile(atPath: file.path, contents: nil)
     append("{\"k\":\"start\",\"t\":\(time()),\"wall\":\(String(format: "%.6f", Date().timeIntervalSince1970)),\"scale\":\(UIScreen.main.scale),\"maxFPS\":\(UIScreen.main.maximumFramesPerSecond)}")
     startDisplayLink()
+    KeyboardReplay.start()
     startRunLoopObserver()
     DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
       self?.watchTouches()

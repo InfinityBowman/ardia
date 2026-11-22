@@ -30,6 +30,7 @@ struct OmniboxTextField: UIViewRepresentable {
     field.smartDashesType = .no
     field.enablesReturnKeyAutomatically = true
     field.clearButtonMode = .never
+    if KeyboardReplay.isActive { field.inputView = UIView(frame: .zero) }
     field.adjustsFontForContentSizeCategory = true
     field.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: 17))
     field.setContentHuggingPriority(.defaultLow, for: .horizontal)
