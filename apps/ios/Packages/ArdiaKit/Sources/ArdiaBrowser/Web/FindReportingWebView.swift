@@ -6,6 +6,16 @@ import WebKit
 final class FindReportingWebView: WKWebView {
   var onFindSessionChange: ((Bool) -> Void)?
 
+  override init(frame: CGRect, configuration: WKWebViewConfiguration) {
+    super.init(frame: frame, configuration: configuration)
+    NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
+  }
+
+  required init?(coder: NSCoder) {
+    super.init(coder: coder)
+    NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
+  }
+
   @objc(findInteraction:didBeginFindSession:)
   func findInteractionDidBegin(_ interaction: UIFindInteraction, session: UIFindSession) {
     forwardToWebKit(#selector(findInteractionDidBegin(_:session:)), interaction, session)
