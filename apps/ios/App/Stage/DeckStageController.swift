@@ -188,6 +188,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     stage.set(\.isShowingArchiveCard, app.deck.shouldOfferArchiveCard(openTabs: app.deckTabs.count))
     updateGeometry()
     order = sourceOrder
+    checkOrder()
     stage.set(\.isEmpty, order.isEmpty)
     lifts = [:]
     let entrance = app.deck.entrance
@@ -328,8 +329,21 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     stopTransition()
     phase = .opening(id)
     setPageBar(false)
+    let next = sourceOrder
+    if next != order, next.last == id {
+      order = next
+      syncCards()
+      scroll = Double(max(0, order.count - 2))
+      UIView.performWithoutAnimation { layoutCards(progress: 0) { $0 != .expanded } }
+    }
+    checkOrder()
     runOpen(headersDelayed: false)
     commitNow()
+  }
+
+  private func checkOrder() {
+    guard stage.query.isEmpty, let selected = app.tabs.selectedTabID, order.contains(selected), order.last != selected else { return }
+    HarnessProbe.mark("deck.misordered")
   }
 
   private func runHome(to id: UUID, duration: TimeInterval, timing: UICubicTimingParameters) {

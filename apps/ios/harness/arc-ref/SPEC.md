@@ -613,3 +613,21 @@ iPhone's bar line (§6.1).
   Translate), Site Settings, Block Ads and Trackers, and More (Send, Print, History, Bookmarks,
   Downloads, Open in Default Browser). Arc's light-mode fills `#d6d7d9` (row) and `#d2d3d4` (tile);
   dark mode is a guess, white at 0.1.
+
+### 6.7 Turning back to the switcher while an older card lands (iPad `s2` r3/r5, `v-tabs-during-zoom.jpg`)
+
+- Arc: tap an older card (Penguin, the n−1 card), then the tabs button 154 ms into the zoom (r3) or
+  302 ms after it (r5). The page shrinks straight back into the **rightmost** (current) slot, and the old
+  newest card (Linear) flies out of the tabs button into the n−1 slot, as in a normal open from the
+  page (frames 293–460). A picked card is the newest from the moment it's picked.
+- Ardia before the fix: the model already made the tab the newest at the tap, but the turn-back reused
+  the switcher's old order, so the tapped card shrank back into its old slot with the old newest to its
+  right (owner's iPhone screenshot, 2026-11-22). After the landing, a fresh open was already right.
+- Ardia now: the turn-back takes the model's order, puts every other card in its open-from-page start
+  pose (the n−1 and n−2 as the tabs button's thumbnails, the rest off screen) and runs the normal open,
+  so the zooming card shrinks into the rightmost slot from wherever it is. Bar swipes still don't
+  reorder (they freeze the order, as before).
+- harness: `deck-turnback` drives this from an in-app script (AXe taps are about a second apart on
+  this Mac, too slow to land mid-landing) with the tabs button 50, 150 and 300 ms into the landing and
+  500 ms after it, and fails if any switcher shows the selected tab anywhere but rightmost
+  (`deck.misordered`). Before the fix: 6 of 8 misordered; after: 0.

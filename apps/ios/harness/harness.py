@@ -46,12 +46,14 @@ TARGETS = {
     "tap_commit_ms": 8,
     "pager_first_move_ms": 40,
     "pager_settle_ms": 600,
+    "misordered": 0,
 }
 
 CHECKS = {
     "deck-rapid": ["fall_ms", "tap_commit_ms", "stall_frames", "flash_frames", "main_busy_max_ms", "dropped_frames"],
     "swipe-tabs": ["stall_frames", "flash_frames", "tap_commit_ms", "main_busy_max_ms", "dropped_frames", "pager_first_move_ms", "pager_settle_ms"],
     "swipe-interrupt": ["stall_frames", "flash_frames", "tap_commit_ms", "main_busy_max_ms", "dropped_frames", "pager_settle_ms"],
+    "deck-turnback": ["misordered", "tap_commit_ms", "stall_frames", "flash_frames", "dropped_frames"],
 }
 LAUNCH_ARGS = {
     "swipe-interrupt": ["-BrowsePagerScript", "-BrowseDelay", "5"],
@@ -196,6 +198,9 @@ def shot(args):
 
 
 def batch(sim, steps):
+    if all(step.startswith("sleep ") for step in steps):
+        time.sleep(sum(float(step.split()[1]) for step in steps))
+        return
     sh(["axe", "batch", "--udid", sim, *sum((["--step", s] for s in steps), [])], timeout=600)
 
 
@@ -254,6 +259,17 @@ def scenario_deck_switch(sim, switches=4):
         steps += [f"tap -x {tabs['x']:.0f} -y {tabs['y']:.0f}", "sleep 0.6", "tap -x 60 -y 470", "sleep 0.9"]
     steps.append("sleep 1.0")
     return steps
+
+
+TURNBACK_GAPS = (0.05, 0.15, 0.3, 0.5)
+TURNBACK_SCRIPT = ",".join(["wait:8"] + [f"switcher,wait:0.9,tap,wait:{gap},switcher,wait:1,browse,wait:1" for gap in TURNBACK_GAPS * 2])
+
+
+def scenario_deck_turnback(sim):
+    """In-app script (AXe taps are ~1 s apart, too slow to land mid-landing): open the switcher, open
+    the card left of the current one, then the tabs button 50, 150, 300 ms into its landing and 500 ms
+    after it began. The tapped tab must come back as the newest card, rightmost (Arc, SPEC 2.3 r3)."""
+    return [f"sleep {len(TURNBACK_GAPS) * 2 * 3.0 + 6.0:.1f}"]
 
 
 def scenario_search_toggle(sim, cycles=4):
@@ -361,7 +377,9 @@ SCENARIOS = {
     "swipe-interrupt": scenario_swipe_interrupt,
     "deck-switch": scenario_deck_switch,
     "search-toggle": scenario_search_toggle,
+    "deck-turnback": scenario_deck_turnback,
 }
+LAUNCH_ARGS["deck-turnback"] = ["-ArdiaDeck", TURNBACK_SCRIPT]
 
 
 def video_frames(path, w=60, h=130):
@@ -546,6 +564,7 @@ def analyse_probe(events, t0=None):
         "worst_main_passes": worst,
         "latencies": latencies,
         "marks": [{"t": round(m["t"], 3), "name": m["name"], **({"detail": m["detail"]} if m.get("detail") else {})} for m in interaction][:80],
+        "misordered": sum(1 for m in marks if m["name"] == "deck.misordered"),
     }
 
 
@@ -561,6 +580,7 @@ def verdict(report):
         "tap_commit_ms": (max([v for k, vs in p.get("latencies", {}).items() if k.endswith("->commit_ms") for v in vs], default=None), TARGETS["tap_commit_ms"]),
         "pager_first_move_ms": (max(p.get("latencies", {}).get("touch->pager.move_ms", []), default=None), TARGETS["pager_first_move_ms"]),
         "pager_settle_ms": (max(p.get("latencies", {}).get("pager.settle->settled_ms", []), default=None), TARGETS["pager_settle_ms"]),
+        "misordered": (p.get("misordered"), TARGETS["misordered"]),
     }
     wanted = CHECKS.get(report.get("scenario"), DEFAULT_CHECKS)
     return {k: {"value": val, "target": tgt, "ok": val is not None and val <= tgt} for k, (val, tgt) in checks.items() if k in wanted}
@@ -701,8 +721,11 @@ def run(args):
     steps = SCENARIOS[args.scenario](sim)
     video = os.path.join(directory, "video.mp4")
     recorder = subprocess.Popen(["xcrun", "simctl", "io", sim, "recordVideo", "--codec=h264", "--force", video],
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                stdout=subprocess.DEVNULL, stderr=open(os.path.join(directory, "recorder.log"), "w"))
     tracer = tracers[0] if tracers else None
+    deadline = time.time() + 15
+    while time.time() < deadline and "Recording started" not in open(os.path.join(directory, "recorder.log")).read():
+        time.sleep(0.1)
     time.sleep(1.0)
     began = time.time()
     batch(sim, steps)
