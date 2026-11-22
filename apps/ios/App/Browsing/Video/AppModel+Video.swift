@@ -36,7 +36,7 @@ extension AppModel {
     }
     web.downloads.onActivityChange = { [weak self] in
       guard let self else { return }
-      downloadKeeper.update(running: web.downloads.hasRunningTransfers, fraction: web.downloads.overallFraction)
+      downloadKeeper.update(running: web.downloads.hasRunningTransfers, fraction: web.downloads.summary.fraction)
     }
   }
 

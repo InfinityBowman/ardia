@@ -11,14 +11,19 @@ final class DownloadKeeper {
   private var continued: BGContinuedProcessingTask?
   private var submitted: String?
   private var poll: Task<Void, Never>?
+  private var hadFailure = false
 
-  func update(running: Bool, fraction: Double) {
+  func update(running: Bool, fraction: Double?) {
     if running {
       hold()
       report(fraction)
     } else {
       release()
     }
+  }
+
+  func noteFailure() {
+    hadFailure = true
   }
 
   private func hold() {
@@ -33,7 +38,7 @@ final class DownloadKeeper {
       while !Task.isCancelled {
         try? await Task.sleep(for: .seconds(1))
         guard let self, let manager else { return }
-        report(manager.overallFraction)
+        report(manager.summary.fraction)
       }
     }
   }
@@ -50,16 +55,18 @@ final class DownloadKeeper {
           task.setTaskCompleted(success: true)
           return
         }
+        HarnessProbe.mark("keeper.run")
         task.progress.totalUnitCount = 100
         task.expirationHandler = { [weak self] in
-          DispatchQueue.main.async { MainActor.assumeIsolated { self?.continued = nil } }
+          DispatchQueue.main.async { MainActor.assumeIsolated { self?.expired(identifier) } }
         }
         self.continued = task
-        self.report(self.manager?.overallFraction ?? 0)
+        self.report(self.manager?.summary.fraction)
       }
     }
     guard registered else { return }
-    let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: String(localized: "Downloading Video"), subtitle: subtitle)
+    HarnessProbe.mark("keeper.submit")
+    let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: title, subtitle: subtitle)
     request.strategy = .fail
     submitted = identifier
     Task { [weak self] in
@@ -71,23 +78,45 @@ final class DownloadKeeper {
     }
   }
 
+  private var title: String {
+    manager?.running.allSatisfy(\.isVideo) == false ? String(localized: "Downloading") : String(localized: "Downloading Video")
+  }
+
   private var subtitle: String {
     let running = manager?.transfers.filter(\.isRunning) ?? []
     if running.count == 1, let name = running.first?.fileName { return name }
     return String(localized: "\(running.count) downloads")
   }
 
-  private func report(_ fraction: Double) {
+  private func report(_ fraction: Double?) {
     guard let continued else { return }
-    continued.progress.completedUnitCount = Int64((min(max(fraction, 0), 1) * 100).rounded())
+    if let fraction {
+      continued.progress.completedUnitCount = Int64((min(max(fraction, 0), 1) * 100).rounded())
+    }
     continued.updateTitle(continued.title, subtitle: subtitle)
+  }
+
+  private func expired(_ identifier: String) {
+    guard submitted == identifier, let task = continued else { return }
+    continued = nil
+    submitted = nil
+    task.setTaskCompleted(success: false)
+    HarnessProbe.mark("keeper.expired")
+    guard let manager else { return }
+    for transfer in manager.running { manager.cancel(transfer) }
   }
 
   private func release() {
     poll?.cancel()
     poll = nil
-    continued?.progress.completedUnitCount = 100
-    continued?.setTaskCompleted(success: true)
+    let succeeded = !hadFailure
+    hadFailure = false
+    if let continued {
+      if succeeded { continued.progress.completedUnitCount = continued.progress.totalUnitCount }
+      continued.setTaskCompleted(success: succeeded)
+      HarnessProbe.mark("keeper.complete", succeeded ? "success" : "failure")
+    }
+    if submitted != nil || backgroundTask != .invalid { HarnessProbe.mark("keeper.release") }
     continued = nil
     submitted = nil
     endBackgroundTask()

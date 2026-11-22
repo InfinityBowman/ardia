@@ -20,9 +20,9 @@ extension AppModel {
 
   func announceDownload(_ outcome: DownloadOutcome) {
     switch outcome {
-    case .finished(let file) where VideoSaving.isVideo(file):
+    case .finished(let file, _) where VideoSaving.isVideo(file):
       toasts.show(.downloaded(file.lastPathComponent) { [weak self] in self?.browse.finishedVideo = file })
-    case .finished(let file):
+    case .finished(let file, _):
       toasts.show(.downloaded(file.lastPathComponent) { [weak self] in self?.web.shareRequest = file })
     case .failed(let fileName):
       toasts.show(.downloadFailed(fileName))
