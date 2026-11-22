@@ -335,8 +335,23 @@ def scenario_search_plus(sim, cycles=3):
     return steps
 
 
+def scenario_page_menu(sim, cycles=2):
+    """Tap ^ for the page menu, close it by tapping the page, then open it again and swipe it down."""
+    more = find(sim, "Page Menu")
+    if not more:
+        sys.exit("no page menu button on screen")
+    tap = f"tap -x {more['x']:.0f} -y {more['y']:.0f}"
+    steps = []
+    for _ in range(cycles):
+        steps += [tap, "sleep 1.0", "tap -x 200 -y 140", "sleep 1.0"]
+        steps += [tap, "sleep 1.0", "swipe --start-x 200 --start-y 560 --end-x 200 --end-y 800 --duration 0.12", "sleep 1.0"]
+    steps.append("sleep 0.5")
+    return steps
+
+
 SCENARIOS = {
     "search-plus": scenario_search_plus,
+    "page-menu": scenario_page_menu,
     "deck-rapid": scenario_deck_rapid,
     "deck-pingpong": scenario_deck_pingpong,
     "deck-grid": scenario_deck_grid,

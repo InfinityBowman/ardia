@@ -60,7 +60,12 @@ struct BrowsingView: View {
       return insets.top / max(proxy.size.height + insets.top + insets.bottom, 1)
     } action: { pageTopShare = $0 }
     .modifier(PageRequestAlert(page: currentWebPage))
-    .sheet(isPresented: $browse.isToolbarPresented) {
+    .overlay {
+      if screenLayout == .phone {
+        PageMenuPanel()
+      }
+    }
+    .sheet(isPresented: screenLayout == .phone ? .constant(false) : $browse.isToolbarPresented) {
       if let id = app.tabs.selectedTabID {
         ToolbarSheet(tabID: id)
       }

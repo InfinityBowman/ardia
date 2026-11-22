@@ -594,3 +594,22 @@ iPhone's bar line (§6.1).
   harness's search-open timing are unchanged.
 - Swiping up from the bar opens the same panel, growing from the + capsule at rest (Ardia's bar doesn't
   rise with the finger first).
+
+### 6.6 Page menu growing out of the bar (`s4` menu_open, iPad frames; the iPhone recording has no page menu)
+
+- Arc (§1.4, §2.6, `v-menu-open.jpg`): the sheet rises out of the bar on a critically damped spring,
+  response ≈ 0.22 s, and **the + capsule** (not the ^ circle) visibly widens into the address row as it
+  rises; the bar's thumbnail rises a little and fades under the sheet. Closing by tapping the page
+  collapses the sheet in ≈ 4 frames; a swipe down follows the finger 1 : 1, then drops into the bar.
+- Ardia: the menu is now its own panel over the page instead of a system sheet. Full width, 30 pt top
+  corners, the bar band's material, the page dimmed by black at 0.2. At rest the address row is
+  centred on the bar line under the + capsule; rising (offset on a critically damped spring, response
+  0.22 s), it widens from 75.5 × 39.5 to 369 × 47.5 and its contents fade in while a + glyph fades out.
+  Closing reverses it on a 0.12 s spring; dragging the panel follows the finger and closes past 90 pt
+  or on a downward fling.
+- Layout follows §1.4: address row 369 × 47.5 (back, forward, domain, pin, reload), four 80 × 80 tiles
+  (radius 20, labels below: Find on Page, Reader, Copy Link, Share), then separate rows (47.5 tall,
+  radius 16, 16.5 apart): Display Options (expands to Night Shade, Page Zoom, Desktop Site,
+  Translate), Site Settings, Block Ads and Trackers, and More (Send, Print, History, Bookmarks,
+  Downloads, Open in Default Browser). Arc's light-mode fills `#d6d7d9` (row) and `#d2d3d4` (tile);
+  dark mode is a guess, white at 0.1.

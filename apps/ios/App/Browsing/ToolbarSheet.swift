@@ -5,18 +5,24 @@ import SwiftUI
 
 struct ToolbarSheet: View {
   let tabID: UUID
+  var panelMaxHeight: CGFloat?
+  var onClose: (() -> Void)?
 
   @Environment(AppModel.self) private var app
   @Environment(\.dismiss) private var dismiss
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.pageMenuRise) private var rise
   @State private var copies = 0
   @State private var confirmsTranslation = false
   @State private var contentHeight: CGFloat = 560
   @State private var bottomInset: CGFloat = 0
   @State private var windowRoom: CGFloat = .greatestFiniteMagnitude
   @State private var followUp: PageMenuFollowUp?
-  @ScaledMetric(relativeTo: .body) private var capsuleHeight: CGFloat = MenuLayout.capsuleHeight
+  @State private var showsDisplay = false
+  @State private var showsMore = false
+  @ScaledMetric(relativeTo: .body) private var capsuleHeight: CGFloat = PageMenuLayout.addressHeight
+  @ScaledMetric(relativeTo: .body) private var tileSize: CGFloat = PageMenuLayout.tile
 
   private var tab: BrowserTab? { app.tabs.tab(tabID) }
   private var page: WebTab? { app.web.existingWebTab(tabID) }
@@ -31,40 +37,47 @@ struct ToolbarSheet: View {
         }
         VStack(spacing: PageMenuLayout.groupSpacing) {
           PageMenuGroup {
-            findRow
-            sendRow
-            printRow
-          }
-          PageMenuGroup {
-            PageMenuRow("History") { close(then: .sheet(.history)) }
-            PageMenuRow("Bookmarks") { close(then: .sheet(.bookmarks)) }
-            PageMenuRow("Downloads") { close(then: .sheet(.downloads)) }
-          }
-          PageMenuGroup {
-            if let page {
+            PageMenuDisclosureRow(title: "Display Options", isExpanded: $showsDisplay)
+            if showsDisplay, let page {
               nightShadeRow(page)
               zoomRow(page)
               desktopRow(page)
               translateRow
-              blockingRow(page)
             }
+          }
+          PageMenuGroup {
             PageMenuRow("Site Settings") { close(then: .siteSettings) }
           }
-          if let page, !app.defaultBrowser.isDefault {
+          if let page {
             PageMenuGroup {
-              PageMenuRow("Open in Default Browser") {
-                app.openInDefaultBrowser(page)
-                dismiss()
+              blockingRow(page)
+            }
+          }
+          PageMenuGroup {
+            PageMenuDisclosureRow(title: "More", isExpanded: $showsMore)
+            if showsMore {
+              sendRow
+              printRow
+              PageMenuRow("History") { close(then: .sheet(.history)) }
+              PageMenuRow("Bookmarks") { close(then: .sheet(.bookmarks)) }
+              PageMenuRow("Downloads") { close(then: .sheet(.downloads)) }
+              if let page, !app.defaultBrowser.isDefault {
+                PageMenuRow("Open in Default Browser") {
+                  app.openInDefaultBrowser(page)
+                  leave()
+                }
               }
             }
           }
         }
         .padding(.top, PageMenuLayout.groupSpacing)
       }
-      .padding(MenuLayout.inset)
+      .padding(PageMenuLayout.inset)
       .padding(.bottom, dynamicTypeSize.isAccessibilitySize ? Spacing.large : 0)
     }
     .scrollBounceBehavior(.basedOnSize)
+    .scrollDisabled(panelMaxHeight.map { contentHeight <= $0 } ?? false)
+    .frame(height: panelMaxHeight.map { min(contentHeight, $0) })
     .ignoresSafeArea(.container, edges: .bottom)
     .onScrollGeometryChange(for: CGFloat.self) { geometry in
       geometry.contentSize.height + geometry.contentInsets.top
@@ -90,7 +103,7 @@ struct ToolbarSheet: View {
     .alert("Translate with Google?", isPresented: $confirmsTranslation) {
       Button("Translate") {
         if let page { app.translate(page) }
-        dismiss()
+        leave()
       }
       Button("Cancel", role: .cancel) {}
     } message: {
@@ -105,7 +118,11 @@ struct ToolbarSheet: View {
 
   private func close(then next: PageMenuFollowUp) {
     followUp = next
-    dismiss()
+    leave()
+  }
+
+  private func leave() {
+    if let onClose { onClose() } else { dismiss() }
   }
 
   private var navigationCapsule: some View {
@@ -132,20 +149,36 @@ struct ToolbarSheet: View {
       }
     }
     .padding(.horizontal, Spacing.hairline)
-    .chromeSurface(in: .rect(cornerRadius: isLarge ? MenuLayout.innerRadius : capsuleHeight / 2, style: .continuous), interactive: false)
+    .opacity(isLarge ? 1 : Double(rise))
+    .background {
+      if isLarge {
+        RoundedRectangle(cornerRadius: PageMenuLayout.groupRadius, style: .continuous).fill(Palette.menuGroup)
+      } else {
+        PageMenuAddressShape(rise: rise).fill(Palette.menuGroup)
+      }
+    }
+    .overlay {
+      if !isLarge, rise < 1 {
+        Image(systemName: "plus")
+          .font(.system(size: BrowseLayout.barPlusGlyph, weight: .medium))
+          .foregroundStyle(BrowsePalette.barGlyph)
+          .opacity(Double(1 - rise))
+          .accessibilityHidden(true)
+      }
+    }
   }
 
   private var backButton: some View {
     capsuleButton("chevron.backward", label: "Back", enabled: page?.canGoBack ?? false) {
       page?.goBack()
-      dismiss()
+      leave()
     }
   }
 
   private var forwardButton: some View {
     capsuleButton("chevron.forward", label: "Forward", enabled: page?.canGoForward ?? false) {
       page?.goForward()
-      dismiss()
+      leave()
     }
   }
 
@@ -165,7 +198,7 @@ struct ToolbarSheet: View {
     } else {
       capsuleButton("arrow.clockwise", label: "Reload", enabled: isWebPage) {
         page?.reload()
-        dismiss()
+        leave()
       }
     }
   }
@@ -225,16 +258,22 @@ struct ToolbarSheet: View {
   }
 
   private var actionButtons: some View {
-    HStack(spacing: PageMenuLayout.barSpacing) {
+    HStack(alignment: .top, spacing: 0) {
+      actionButton("doc.text.magnifyingglass", label: "Find on Page") {
+        close(then: .findOnPage)
+      }
+      Spacer(minLength: 0)
       actionButton("doc.plaintext", label: "Reader") {
         app.browse.readerTabID = tabID
-        dismiss()
+        leave()
       }
+      Spacer(minLength: 0)
       actionButton("link", label: "Copy Link") {
         if app.copyLink(of: tabID) { copies += 1 }
       }
+      Spacer(minLength: 0)
       actionButton("square.and.arrow.up", label: "Share") {
-        dismiss()
+        leave()
         app.sharePage(tabID)
       }
     }
@@ -242,20 +281,25 @@ struct ToolbarSheet: View {
 
   private func actionButton(_ symbol: String, label: LocalizedStringKey, action: @escaping () -> Void) -> some View {
     Button(action: action) {
-      Image(systemName: symbol)
-        .font(.body.weight(.medium))
-        .frame(maxWidth: .infinity, minHeight: capsuleHeight)
-        .contentShape(.capsule)
+      VStack(spacing: PageMenuLayout.tileLabelGap) {
+        Image(systemName: symbol)
+          .font(.title3.weight(.regular))
+          .frame(width: tileSize, height: tileSize)
+          .background(Palette.menuTile, in: .rect(cornerRadius: PageMenuLayout.tileRadius, style: .continuous))
+        Text(label)
+          .font(.subheadline)
+          .foregroundStyle(Palette.menuTileLabel)
+          .lineLimit(1)
+          .minimumScaleFactor(0.8)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(width: tileSize + PageMenuLayout.tileLabelGap * 2)
+      .contentShape(.rect)
     }
     .buttonStyle(PageMenuPressStyle())
-    .chromeSurface(in: .capsule)
     .foregroundStyle(isWebPage ? AnyShapeStyle(.primary) : AnyShapeStyle(Color(.tertiaryLabel)))
     .disabled(!isWebPage)
-    .accessibilityLabel(label)
-  }
-
-  private var findRow: some View {
-    PageMenuRow("Find on Page", enabled: isWebPage) { close(then: .findOnPage) }
+    .opacity(isWebPage ? 1 : 0.6)
   }
 
   private var printRow: some View {
@@ -275,14 +319,14 @@ struct ToolbarSheet: View {
       if devices.count == 1, let device = devices.first {
         PageMenuRow("Send to \(device.name)") {
           app.send(tab, to: device)
-          dismiss()
+          leave()
         }
       } else {
         Menu {
           ForEach(devices) { device in
             Button(device.name, systemImage: device.kind == .mac ? "laptopcomputer" : "iphone") {
               app.send(tab, to: device)
-              dismiss()
+              leave()
             }
           }
         } label: {
@@ -320,7 +364,7 @@ struct ToolbarSheet: View {
       set: { wanted in
         guard wanted != app.browse.desktopTabs.contains(tabID) else { return }
         app.toggleDesktopSite(for: page)
-        dismiss()
+        leave()
       }
     ))
     .disabled(!isWebPage)
@@ -336,7 +380,7 @@ struct ToolbarSheet: View {
         set: { wanted in
           guard wanted != page.blockersEnabled else { return }
           app.toggleBlockers(for: page)
-          dismiss()
+          leave()
         }
       )
     )
@@ -402,7 +446,7 @@ struct ToolbarSheet: View {
   private func editQuery() {
     guard let tab else { return }
     let text = app.currentQuery(for: tab)
-    dismiss()
+    leave()
     app.browse.presentSearch(from: .page, text: text, selectsAll: true)
   }
 }

@@ -3,12 +3,33 @@ import SwiftUI
 
 extension Palette {
   static let menuSheet = Color(.systemBackground)
-  static let menuGroup = Color.adaptive(light: Color(.systemBackground), dark: Color(hex: 0x171717))
+  static let menuGroup = Color.adaptive(light: Color(hex: 0xD6D7D9), dark: .white.opacity(0.1))
+  static let menuTile = Color.adaptive(light: Color(hex: 0xD2D3D4), dark: .white.opacity(0.1))
+  static let menuTileLabel = Color.adaptive(light: Color(hex: 0x6E6E73), dark: .white.opacity(0.6))
 }
 
 enum PageMenuLayout {
-  static let groupSpacing: CGFloat = Spacing.page
-  static let barSpacing: CGFloat = Spacing.tight
+  static let groupSpacing: CGFloat = 16.5
+  static let barSpacing: CGFloat = 16.5
+  static let inset: CGFloat = 16
+  static let addressHeight: CGFloat = 47.5
+  static let tile: CGFloat = 80
+  static let tileRadius: CGFloat = 20
+  static let tileLabelGap: CGFloat = 6
+  static let rowHeight: CGFloat = 47.5
+  static let groupRadius: CGFloat = 16
+  static let panelRadius: CGFloat = 30
+  static let overhang: CGFloat = 600
+  static let topGap: CGFloat = 12
+  static let dim: Double = 0.2
+  static let pullToClose: CGFloat = 90
+  static let flingToClose: CGFloat = 160
+  static let open = Animation.spring(response: 0.22, dampingFraction: 1)
+  static let close = Animation.spring(response: 0.12, dampingFraction: 1)
+
+  static func travel(panelHeight: CGFloat, safeBottom: CGFloat) -> CGFloat {
+    max(panelHeight - BrowseLayout.barLine(safeBottom: safeBottom) - inset - addressHeight / 2, 0)
+  }
   static let zoomHeight: CGFloat = 32
   static let zoomButtonWidth: CGFloat = 40
 }
@@ -66,7 +87,7 @@ struct PageMenuGroup<Content: View>: View {
         }
       }
     }
-    .background(Palette.menuGroup, in: .rect(cornerRadius: MenuLayout.innerRadius, style: .continuous))
+    .background(Palette.menuGroup, in: .rect(cornerRadius: PageMenuLayout.groupRadius, style: .continuous))
   }
 }
 
@@ -101,7 +122,7 @@ struct PageMenuRowLabel<Accessory: View>: View {
     }
     .padding(.horizontal, Spacing.page)
     .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? Spacing.small : 0)
-    .frame(minHeight: MenuLayout.rowHeight)
+    .frame(minHeight: PageMenuLayout.rowHeight)
     .contentShape(.rect)
   }
 }
@@ -124,6 +145,28 @@ struct PageMenuRow: View {
     .buttonStyle(PageMenuRowStyle())
     .foregroundStyle(enabled ? AnyShapeStyle(.primary) : AnyShapeStyle(Color(.tertiaryLabel)))
     .disabled(!enabled)
+  }
+}
+
+struct PageMenuDisclosureRow: View {
+  let title: LocalizedStringKey
+  @Binding var isExpanded: Bool
+
+  var body: some View {
+    Button {
+      withAnimation(Motion.snappy) { isExpanded.toggle() }
+    } label: {
+      PageMenuRowLabel(title: Text(title)) {
+        Image(systemName: "chevron.right")
+          .font(.footnote.weight(.semibold))
+          .foregroundStyle(.secondary)
+          .rotationEffect(.degrees(isExpanded ? 90 : 0))
+          .accessibilityHidden(true)
+      }
+    }
+    .buttonStyle(PageMenuRowStyle())
+    .foregroundStyle(.primary)
+    .accessibilityValue(isExpanded ? Text("Expanded") : Text("Collapsed"))
   }
 }
 
@@ -155,6 +198,6 @@ struct PageMenuToggleRow: View {
     .tint(Palette.success)
     .padding(.horizontal, Spacing.page)
     .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? Spacing.small : 0)
-    .frame(minHeight: MenuLayout.rowHeight)
+    .frame(minHeight: PageMenuLayout.rowHeight)
   }
 }
