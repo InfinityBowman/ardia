@@ -14,6 +14,7 @@ struct BottomBar: View {
   var sideInset: CGFloat = 0
   var safeBottom: CGFloat = 0
   var showsTabStack = true
+  var iconsOnly = false
   let actions: BarActions
 
   var body: some View {
@@ -33,7 +34,9 @@ struct BottomBar: View {
     ZStack {
       BarTabsStackButton(actions: actions, showsStack: showsTabStack)
         .frame(maxWidth: .infinity, alignment: .leading)
-      BarPlusCapsule(action: actions.onPlus)
+      if !iconsOnly {
+        BarPlusCapsule(action: actions.onPlus)
+      }
       BarPageMenuButton(address: address, action: actions.onMore)
         .padding(.trailing, BrowseLayout.barSide - (BrowseLayout.hitTarget - BrowseLayout.barCircle) / 2)
         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -43,7 +46,9 @@ struct BottomBar: View {
     .padding(.bottom, BrowseLayout.barLine(safeBottom: safeBottom) - BrowseLayout.barControl / 2)
     .frame(maxWidth: .infinity)
     .background(alignment: .bottom) {
-      BarBand(height: BrowseLayout.barHeight(safeBottom: safeBottom))
+      if !iconsOnly {
+        BarBand(height: BrowseLayout.barHeight(safeBottom: safeBottom))
+      }
     }
   }
 }

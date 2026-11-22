@@ -35,7 +35,10 @@ final class HarnessProbe {
     append("{\"k\":\"start\",\"t\":\(time()),\"wall\":\(String(format: "%.6f", Date().timeIntervalSince1970)),\"scale\":\(UIScreen.main.scale),\"maxFPS\":\(UIScreen.main.maximumFramesPerSecond)}")
     startDisplayLink()
     startRunLoopObserver()
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.watchTouches() }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+      self?.watchTouches()
+      Self.applyAnimationSpeed()
+    }
     flushTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
       MainActor.assumeIsolated { self?.flush() }
     }
@@ -47,6 +50,15 @@ final class HarnessProbe {
     }
     NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { _ in
       MainActor.assumeIsolated { HarnessProbe.mark("keyboard.willHide") }
+    }
+  }
+
+  private static func applyAnimationSpeed() {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard let index = arguments.firstIndex(of: "-ArdiaAnimationSpeed"), arguments.indices.contains(index + 1),
+          let speed = Float(arguments[index + 1]), speed > 0 else { return }
+    for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+      for window in scene.windows { window.layer.speed = speed }
     }
   }
 
@@ -104,7 +116,10 @@ extension HarnessProbe {
   fileprivate func watchTouches() {
     let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
     guard let window = windows.first(where: \.isKeyWindow) ?? windows.first else {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.watchTouches() }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+      self?.watchTouches()
+      Self.applyAnimationSpeed()
+    }
       return
     }
     window.addGestureRecognizer(TouchWatcher { [weak self] phase, touch in self?.logTouch(phase, touch, in: window) })

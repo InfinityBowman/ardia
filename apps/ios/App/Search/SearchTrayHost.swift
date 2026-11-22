@@ -7,6 +7,8 @@ struct SearchTrayHost: View {
   @Environment(\.screenLayout) private var screenLayout
   @Environment(\.profileLook) private var look
   @Environment(\.usesGlass) private var usesGlass
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @Environment(\.colorScheme) private var colorScheme
   @ScaledMetric(relativeTo: .title3) private var fieldScale: CGFloat = 1
   @State private var shown: BrowseSession.SearchRequest?
   @State private var presentation = 0
@@ -22,6 +24,7 @@ struct SearchTrayHost: View {
   @State private var settleTask: Task<Void, Never>?
   @State private var landingTask: Task<Void, Never>?
   @State private var removalTask: Task<Void, Never>?
+  @State private var showsBarIcons = false
 
   static let keyboardThreshold: CGFloat = 120
 
@@ -39,8 +42,6 @@ struct SearchTrayHost: View {
       let restsWithoutKeyboard = hasLanded && !keyboardUp && !isClosing
       let liveLift = restsWithoutKeyboard ? max(keyboardHeight, safeBottom) : keyboardHeight
       let isUp = keyboardUp || (!isClosing && hasLanded)
-      // Size for where the keyboard is going (known from its notification), not where the safe
-      // area says it is yet, so the tray never changes height mid-rise.
       let expected = !isClosing && keyboard.height > Self.keyboardThreshold ? keyboard.height : 0
       let lift = heldLift ?? max(liveLift, expected)
       let command = screenLayout.isWide ? CommandBarPlacement(proxy: proxy, lift: lift) : nil
@@ -49,13 +50,16 @@ struct SearchTrayHost: View {
       let restingDrop = isUp || reduceMotion || command != nil ? 0 : maxHeight + BrowseLayout.sheetTopRadius
       ZStack(alignment: .bottom) {
         if command == nil {
-          // Phone: the tray rides the keyboard on Core Animation (see KeyboardRider).
           KeyboardRider(
-            heldLift: heldLift,
+            holdsLift: heldLift != nil,
+            dragOffset: dragOffset,
             isVisible: shown != nil && !isClosing,
             isInteractive: shown != nil && !isClosing,
             growth: growth(panelHeight: maxHeight, safeBottom: safeBottom),
-            content: riderContent(maxHeight: maxHeight, progress: progress, liveLift: liveLift, safeBottom: safeBottom)
+            onDismiss: { app.cancelSearch() },
+            onClosed: { finishClosing() },
+            content: riderContent(maxHeight: maxHeight, liveLift: liveLift, safeBottom: safeBottom),
+            icons: barIcons(safeBottom: safeBottom)
           )
           .ignoresSafeArea()
         } else if let shown {
@@ -101,51 +105,63 @@ struct SearchTrayHost: View {
     }
   }
 
-  /// The dim and the tray, laid out for the keyboard rider: the tray ends where the keyboard begins.
-  private func riderContent(maxHeight: CGFloat, progress: CGFloat, liveLift: CGFloat, safeBottom: CGFloat) -> some View {
-    KeyboardRiderLayout(
-      dim: Group {
-        if let shown {
-          dim(over: shown).opacity(1 - progress)
-        }
-      },
-      rider: Group {
-        if let shown {
-          SearchTray(
-            request: shown,
-            isFocused: $isFocused,
-            maxHeight: maxHeight,
-            dismissDrag: dismissDrag(lift: liveLift),
-            pull: pull(lift: liveLift),
-            barLineAboveBottom: BrowseLayout.barLine(safeBottom: safeBottom) - safeBottom
-          )
-            .id(presentation)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { trayHeight = $0 }
-            .offset(y: dragOffset)
-            .accessibilityAddTraits(.isModal)
-        }
+  private func riderContent(maxHeight: CGFloat, liveLift: CGFloat, safeBottom: CGFloat) -> some View {
+    Group {
+      if let shown {
+        SearchTray(
+          request: shown,
+          isFocused: $isFocused,
+          maxHeight: maxHeight,
+          dismissDrag: dismissDrag(lift: liveLift),
+          pull: pull(lift: liveLift),
+          barLineAboveBottom: BrowseLayout.barLine(safeBottom: safeBottom) - safeBottom
+        )
+        .id(presentation)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { trayHeight = $0 }
+        .accessibilityAddTraits(.isModal)
       }
-    )
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .ignoresSafeArea()
     .environment(app)
     .environment(\.profileLook, look)
     .environment(\.usesGlass, usesGlass)
     .environment(\.screenLayout, screenLayout)
   }
 
+  private func barIcons(safeBottom: CGFloat) -> some View {
+    SearchBarIcons(safeBottom: safeBottom, isShown: showsBarIcons && app.surface == .browsing && shown?.origin == .page)
+      .environment(app)
+      .environment(\.profileLook, look)
+      .environment(\.usesGlass, usesGlass)
+      .environment(\.screenLayout, screenLayout)
+  }
+
   private func growth(panelHeight: CGFloat, safeBottom: CGFloat) -> RiderGrowth {
     let incognito = app.isIncognito
+    let colors = PanelColors.resolved(incognito: incognito, dark: incognito || colorScheme == .dark)
     return RiderGrowth(
       panelHeight: panelHeight,
-      lineAboveBottom: BrowseLayout.barLine(safeBottom: safeBottom) - safeBottom,
-      bandAboveBottom: BrowseLayout.barHeight(safeBottom: safeBottom) - safeBottom,
+      lineAboveBottom: BrowseLayout.barLine(safeBottom: safeBottom),
+      bandAboveBottom: BrowseLayout.barHeight(safeBottom: safeBottom),
       fieldTop: BrowseLayout.sheetFieldTop,
       fieldInset: BrowseLayout.sheetFieldInset,
       fieldHeight: BrowseLayout.searchFieldHeight * fieldScale,
+      fieldLeading: BrowseLayout.sheetFieldLeading,
+      fieldTrailing: BrowseLayout.sheetFieldTrailing,
       capsule: BrowseLayout.barPlus,
       glyphSize: BrowseLayout.barPlusGlyph,
-      capsuleFill: UIColor(BrowsePalette.barPlusFill),
-      fieldFill: UIColor(incognito ? BrowsePalette.incognitoField : BrowsePalette.searchField),
-      glyph: UIColor(BrowsePalette.barGlyph),
+      font: PanelColors.font(for: dynamicTypeSize),
+      panelFill: colors.panelFill,
+      fieldFill: colors.fieldFill,
+      fieldEdge: colors.fieldEdge,
+      glyph: colors.glyph,
+      placeholder: colors.placeholder,
+      text: colors.text,
+      accessory: colors.accessory,
+      accent: colors.accent,
+      initialText: shown?.initialText ?? "",
+      showsAccessories: !incognito && !dynamicTypeSize.isAccessibilitySize,
       dim: shown?.origin == .page ? BrowseLayout.trayDim : 0
     )
   }
@@ -185,6 +201,7 @@ struct SearchTrayHost: View {
     transaction.disablesAnimations = true
     withTransaction(transaction) {
       if shown == nil || isClosing { presentation += 1 }
+      if shown == nil { showsBarIcons = false }
       shown = request
       isClosing = false
       hasLanded = keyboardHeight > Self.keyboardThreshold
@@ -193,6 +210,7 @@ struct SearchTrayHost: View {
       isDragging = false
     }
     app.browse.trayHoldsKeyboard = true
+    if !showsBarIcons { DispatchQueue.main.async { showsBarIcons = true } }
     landingTask?.cancel()
     landingTask = Task {
       try? await Task.sleep(for: .milliseconds(450))
@@ -216,7 +234,7 @@ struct SearchTrayHost: View {
     landingTask?.cancel()
     settleTask?.cancel()
     isFocused = false
-    if keyboardHeight > Self.keyboardThreshold, heldLift == nil {
+    if !screenLayout.isWide || (keyboardHeight > Self.keyboardThreshold && heldLift == nil) {
       isClosing = true
     } else {
       let travel = trayHeight + (heldLift ?? 0) + BrowseLayout.sheetTopRadius
@@ -226,15 +244,22 @@ struct SearchTrayHost: View {
       }
     }
     removalTask?.cancel()
+    let phone = !screenLayout.isWide
     removalTask = Task {
-      for _ in 0..<20 where keyboardHeight > Self.keyboardThreshold {
+      for _ in 0..<20 where keyboardHeight > Self.keyboardThreshold && !phone {
         try? await Task.sleep(for: .milliseconds(50))
       }
-      try? await Task.sleep(for: .milliseconds(450))
+      try? await Task.sleep(for: phone ? .seconds(2) : .milliseconds(450))
       guard !Task.isCancelled, isClosing else { return }
-      finish()
-      refreshRecents()
+      finishClosing()
     }
+  }
+
+  private func finishClosing() {
+    guard isClosing else { return }
+    removalTask?.cancel()
+    finish()
+    refreshRecents()
   }
 
   private func finish() {
@@ -299,6 +324,74 @@ struct SearchTrayHost: View {
       try? await Task.sleep(for: .milliseconds(650))
       guard !Task.isCancelled, !isDragging else { return }
       withAnimation(Motion.traySettle) { heldLift = nil }
+    }
+  }
+}
+
+@MainActor
+private struct PanelColors {
+  let panelFill: UIColor
+  let fieldFill: UIColor
+  let fieldEdge: UIColor
+  let glyph: UIColor
+  let placeholder: UIColor
+  let text: UIColor
+  let accessory: UIColor
+  let accent: UIColor
+
+  private static var cache: [Int: PanelColors] = [:]
+  private static var fonts: [DynamicTypeSize: UIFont] = [:]
+
+  static func resolved(incognito: Bool, dark: Bool) -> PanelColors {
+    let key = (incognito ? 2 : 0) + (dark ? 1 : 0)
+    if let cached = cache[key] { return cached }
+    let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+    func resolve(_ color: Color) -> UIColor { UIColor(color).resolvedColor(with: traits) }
+    let colors = PanelColors(
+      panelFill: resolve(incognito ? SearchPanelPalette.incognitoFill : SearchPanelPalette.fill),
+      fieldFill: resolve(incognito ? SearchPanelPalette.incognitoField : SearchPanelPalette.field),
+      fieldEdge: resolve(SearchPanelPalette.fieldEdge),
+      glyph: resolve(BrowsePalette.barGlyph),
+      placeholder: resolve(SearchPanelPalette.placeholder),
+      text: resolve(SearchPanelPalette.text),
+      accessory: resolve(SearchPanelPalette.accessory),
+      accent: resolve(BrowsePalette.searchAccent)
+    )
+    cache[key] = colors
+    return colors
+  }
+
+  static func font(for size: DynamicTypeSize) -> UIFont {
+    if let cached = fonts[size] { return cached }
+    let font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: 17))
+    fonts[size] = font
+    return font
+  }
+}
+
+private struct SearchBarIcons: View, Equatable {
+  let safeBottom: CGFloat
+  let isShown: Bool
+
+  @Environment(AppModel.self) private var app
+
+  nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.safeBottom == rhs.safeBottom && lhs.isShown == rhs.isShown
+  }
+
+  var body: some View {
+    if isShown {
+      BottomBar(
+        address: BarAddress(tab: app.tabs.selectedTab, page: app.currentPage),
+        safeBottom: safeBottom,
+        iconsOnly: true,
+        actions: BarActions(onTabs: {}, onAddress: {}, onPlus: {}, onMore: {}, onExpand: {}, onStep: { _ in }, onSelectTab: { _ in }, onCloseTab: {})
+      )
+      .frame(height: BrowseLayout.barHeight(safeBottom: safeBottom), alignment: .bottom)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+      .ignoresSafeArea()
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
     }
   }
 }
