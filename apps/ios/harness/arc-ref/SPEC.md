@@ -576,24 +576,81 @@ Band colour, sampled at x = 120 and 300 (grey average):
   zoom takes ≈ 300 ms).
 - **Opening an older card** (625–642): the thumbnails rise from below the screen, §6.3.
 
-### 6.5 Search panel growing out of the + capsule (`s4` plus_tap_open, iPad frames; the iPhone recording has no search)
+### 6.5 Search panel growing out of the + capsule (owner's second recording, 2026-11-22; iPad check the same day)
 
-The owner's recording doesn't open search in Arc, so this follows the iPad stream and §1.3/§2.6, set on the
-iPhone's bar line (§6.1).
+A second recording (iPhone 17 Pro, 1206 × 2622 px = 402 × 874 pt, variable frame rate ≈ 60 fps, 12.1 s,
+dark mode) has Ardia from 0 to ≈ 6.5 s and Arc Search from ≈ 6.7 s: a swipe-up open at 7.84–9.3 s,
+a tap-outside close at 9.84–10.15 s, a tap-+ open at 10.64–11.08 s and a tap-outside close at 11.48–11.8 s.
+Frames below are this recording's (1-based, `-fps_mode passthrough`), times from each move's first moving
+frame. Positions were tracked on the + capsule / field in column x = 226 (`runs/search3`). **The owner's
+keyboard is Wispr Flow, a third-party keyboard**, so the keyboard's own timing below is Wispr's, not the
+system keyboard's. This section replaces the old iPad-only notes.
 
-- Arc's + capsule leaves the bar and widens into the search field (full width less 16 pt each side,
-  47.5 pt tall) while the sheet's top edge rises from the band to its resting place; the + glyph stays
-  visible inside the capsule for ≈ 7 frames and fades, and the bar's other icons go under the sheet.
-  The field lands on a critically damped spring, response ≈ 175–190 ms (§2.6).
-- Ardia: the sheet is the band's material (the same blur and grey) with a 30 pt top radius, full width,
-  field inset 16 pt from the sides and the top. The growth runs on Core Animation in the keyboard rider:
-  the sheet is revealed by a mask whose top rises from the band top (bar line + 32.75) to the sheet top,
-  and a capsule (75.5 × 39.5, the + glyph inside) widens into the field rect, both on a critically damped
-  spring with response 0.19 s; the glyph fades over 0.12 s and the capsule fades out over 0.08 s once the
-  real field is under it. The text field focuses at once, as before, so the keyboard warm-up and the
-  harness's search-open timing are unchanged.
-- Swiping up from the bar opens the same panel, growing from the + capsule at rest (Ardia's bar doesn't
-  rise with the finger first).
+**Tap + to open (frames 637–663)** runs every part at once; it is not sequential.
+
+| Part | Measured |
+|---|---|
+| Panel (field top) | 812 → 235.5 (travel 576.5); spring fit response **≈ 0.30 s**, ζ 0.94–1.0, starts ≈ 1 frame after the touch frame (rms 4.6 pt). 50 % at ≈ 100 ms, 90 % at ≈ 200 ms, settled ≈ 400 ms |
+| Capsule width | 74 → 370; response **≈ 0.25 s**, ζ ≈ 0.95, starts ≈ 25 ms before the rise: 102 at 17 ms, 228 at 67 ms, 290 at 100 ms, 330 at 117 ms, 368 at 250 ms. Height 35–40 → 47.5 over the same time |
+| + glyph | stays at the capsule's leading side (centre 37.75 → 15 pt inside the left edge as it widens), fully visible to ≈ 67 ms, gone by ≈ 117 ms |
+| Field content | laid out at the final width and anchored to the capsule's **left** edge, clipped by the capsule: the caret and "Search…" show from the first moving frame (focus is immediate), the text starts 21.5 pt right of the + glyph and slides to 23–24.5 pt inside as the + fades; the mic appears at ≈ 117 ms and the eyes at ≈ 150 ms as the right edge uncovers them |
+| Tabs button and ^ | ride up with the panel's top row (^ centre 828.5 → 806 → 778.5 on the first two frames) and fade: ≈ 0.85 at 33 ms, 0.5 at 67, 0.3 at 83, 0.15 at 117–133, gone ≈ 200 ms; the widening capsule draws over the tabs button |
+| Keyboard (Wispr) | first visible ≈ 100 ms (top ≈ 751), rises ≈ 330 ms, lands ≈ 433 ms at top ≈ 522. The panel leads it: field top minus keyboard top is −239 at 100 ms, −288 at 200 ms, −299 at rest, so the panel is its own spring to the keyboard's final frame, not riding it 1 : 1 |
+| Page | recedes into a card behind the panel: scale **0.952** about the status bar's bottom (y ≈ 62.6), left edge 10 pt, top 62.3, corner radius ≈ 24, darkened ≈ 22 % (text 250 → 195), over a ≈ `#17161F` backdrop; the card's left edge moves 20 → 29 pt over ≈ 200 ms |
+
+**Close by tapping the page (frames 687–708 and 589–609, same both times):** the field drops 235 → 808
+and narrows 370 → 78 (height 48 → 38) on one critically damped spring, **response ≈ 0.30 s** (fits 0.295–0.307,
+rms ≤ 1.5 pt), starting ≈ 45 ms after the last still frame; the + glyph returns at the leading side by
+≈ 67 ms and "Search…" slides back out to its right; the tabs button and ^ ride down on the panel's top
+row (^ centre ≈ field top + 17) and fade in from ≈ 100 ms (0.15) to ≈ 250 ms (1). The page card grows back
+on a spring, t0 ≈ 45 ms, response ≈ 0.23–0.27 s. Wispr's keyboard vanishes in one frame.
+
+**Swipe up from the bar (frames 469–555):** the panel follows the finger with the + capsule riding its top
+edge at its bar size (76 × 37), 812 → 549 over 0.75 s (≈ 350 pt/s); the tabs button and ^ fade within
+≈ 4 frames of the drag starting; suggestions slide up underneath. After the finger stops and lifts
+(frame 519) the capsule widens in place (78 → 322 in ≈ 150 ms, y within 10 pt), then the keyboard appears
+(frame 529, ≈ 165 ms after the lift, almost full height in one frame) and the panel rides up with it,
+539 → 235 over ≈ 350 ms. This is the sequential open; a tap is not.
+
+**Panel at rest (frame 660, dark mode, over a near-black page):**
+
+| Item | Measured |
+|---|---|
+| Panel | top 218.67 with a 1 px hairline (`#5A595E`, white ≈ 0.24), fill ≈ `#212023` (33,32,35), ≈ 38 just around the field; 30 pt top radius; visible height above Wispr's keyboard ≈ 304 pt with four rows |
+| Field | x 16 → 386 (370), y 236 → 283.67 (47.5), 17.3 pt below the panel top; fill `#3A393C`, a 1 px stroke all round (≈ 92, white ≈ 0.17); "Search…" `#9F9FA6` starting x ≈ 40 (24 pt inside); mic centre 312, eyes centre 356, both ≈ `#979699` |
+| Rows | 56 pt pitch, first row centre 34.5 pt below the field (6.5 pt gap); favicon 22 × 22 at x 18–40 (centre 29), or a globe glyph 18.7 × 19 at x 19.7–38.3 in ≈ `#D0CFD1`; title 17 pt pure white `#FFFFFF` from x ≈ 49; one line each |
+| Icons by kind | tabs and history with a favicon show it; entries without one (Desk, Mocks) show the globe; the iPad's search suggestions show a magnifier (§1.3) |
+
+**Is the panel solid?** No. On the iPad (Arc Search 1.49, iPadOS 27.2.1, 2026-11-22 ≈ 14:50), opened over a
+white Wikipedia page:
+- dark mode: the panel is a translucent dark material, ≈ `#717273` (112–123) over the white page, field
+  ≈ `#777778`, white text; over a dark page it reads ≈ `#242424` like the iPhone's;
+- light mode (switched with `axe settings set --appearance light`, then back to dark): a near-white material,
+  `#F4F4F5` at the top to `#E9E9EA` lower down, field `#D1D2D2`, placeholder ≈ `#737374`, row titles ≈ `#171717`.
+
+**Ardia now** (`App/Search/KeyboardRider.swift`, `SearchTray.swift`, `SuggestionRowView.swift`):
+- Tap +: the panel rises on its own critically damped spring (response 0.30 s) from the bar to where the
+  keyboard will end (the last keyboard height, kept in `searchPanel.keyboardLift`; 336 pt before the first
+  keyboard), retargets on the keyboard's will-change notification and follows later keyboard changes on
+  the keyboard's own curve. A UIKit capsule (field fill, 1 px edge, + glyph, "Search…" or the reopened text,
+  caret, mic and eyes at the field's final offsets from its left edge) widens from the + capsule into the
+  field on a 0.25 s spring, clipped to its own shape; the + fades after 40 ms over 80 ms and the text slides
+  from 21.5 pt right of it to 23 pt inside. A cover in the panel colour hides the real field until the
+  capsule hands over at 300 ms (80 ms fade), or at once on the first keystroke. The panel body fades in over
+  100 ms so the bar's band doesn't snap. The field still focuses in the same pass as before.
+- The tabs button and ^ are a live, non-interactive copy of the bar's (`BottomBar(iconsOnly:)`) on the
+  panel's top row: they ride up with it and fade over 0.2 s on open; on close they ride down and fade in
+  from 100 to 250 ms, and the panel body fades out from 360 to 440 ms onto the real bar, once the panel is
+  within ≈ 2 pt of it (earlier, the copy and the real icons showed doubled).
+- Close: the panel sinks into the band and the field shrinks into the + capsule on 0.30 s springs, the +
+  returning after 80 ms. Every delayed fade is a keyframe animation, so it runs on the render server.
+- Look: solid `#212023` in dark mode (the owner's call: Arc's look over dark pages, on every page), and
+  Arc's light-mode colours (`#F0F0F1`, field `#D1D2D2`, text `#171717`) in light mode; Incognito keeps
+  `#151517`. Rows: favicon (globe while missing) for tabs, history and bookmarks; globe for a typed URL;
+  magnifier for searches; 22 pt icons at x 18–40, titles at x 49; the typed prefix bright and the
+  completion dimmer (§1.3). Panel height above the keyboard 304 pt.
+- Not built: the swipe-up drag that follows the finger (Ardia's bar still rubber-bands up to 60 pt and
+  opens on release), and the page receding into a card.
 
 ### 6.6 Page menu growing out of the bar (`s4` menu_open, iPad frames; the iPhone recording has no page menu)
 
