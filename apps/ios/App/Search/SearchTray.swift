@@ -15,6 +15,7 @@ struct SearchTray<Drag: Gesture>: View {
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.profileLook) private var look
+  @Environment(\.displayScale) private var displayScale
   @State private var model: SearchSuggestionsModel?
   @State private var text = ""
   @State private var highlightedID: String?
@@ -32,6 +33,7 @@ struct SearchTray<Drag: Gesture>: View {
   @ScaledMetric(relativeTo: .body) private var placeholderSize: CGFloat = 17
 
   private var isIncognito: Bool { app.isIncognito }
+  private var isSheet: Bool { barLineAboveBottom != nil }
   private var rowsBudget: CGFloat { max(maxHeight - headerHeight, 0) }
 
   var body: some View {
@@ -79,35 +81,26 @@ struct SearchTray<Drag: Gesture>: View {
   }
 
   private var sheetPanel: some View {
-    let shape = UnevenRoundedRectangle(topLeadingRadius: BrowseLayout.sheetPanelRadius, topTrailingRadius: BrowseLayout.sheetPanelRadius, style: .continuous)
-    return panelColumn
+    panelColumn
       .background(alignment: .top) {
         sheetFill
-          .clipShape(shape)
           .padding(.bottom, -BrowseLayout.sheetOverhang)
           .allowsHitTesting(false)
       }
   }
 
-  @ViewBuilder
   private var sheetFill: some View {
-    if isIncognito {
-      BrowsePalette.incognitoSheet.opacity(reduceTransparency ? 1 : BrowseLayout.panelIncognitoShare)
-    } else if reduceTransparency {
-      look.surface
-    } else {
-      ZStack {
-        BarBackdropBlur()
-        BrowsePalette.barBandTop
-      }
-    }
+    let shape = UnevenRoundedRectangle(topLeadingRadius: BrowseLayout.sheetPanelRadius, topTrailingRadius: BrowseLayout.sheetPanelRadius, style: .continuous)
+    return shape
+      .fill(isIncognito ? SearchPanelPalette.incognitoFill : SearchPanelPalette.fill)
+      .overlay { shape.stroke(SearchPanelPalette.edge, lineWidth: 1 / max(displayScale, 1)) }
   }
 
   private var header: some View {
     field
       .padding(.horizontal, barLineAboveBottom == nil ? BrowseLayout.panelFieldInset : BrowseLayout.sheetFieldInset)
       .padding(.top, barLineAboveBottom == nil ? BrowseLayout.panelFieldInset : BrowseLayout.sheetFieldTop)
-      .padding(.bottom, Spacing.hairline)
+      .padding(.bottom, isSheet ? BrowseLayout.sheetRowsGap : Spacing.hairline)
       .frame(maxWidth: .infinity)
       .contentShape(.rect)
       .highPriorityGesture(dismissDrag)
@@ -132,6 +125,7 @@ struct SearchTray<Drag: Gesture>: View {
         placeholder: String(localized: "Search..."),
         isIncognito: isIncognito,
         selectsAllOnFocus: request.selectsAll,
+        onPanel: isSheet,
         onSubmit: submit
       )
       .frame(maxWidth: .infinity)
@@ -140,7 +134,7 @@ struct SearchTray<Drag: Gesture>: View {
         if text.isEmpty, !isFocused {
           Text("Search...")
             .font(.system(size: placeholderSize))
-            .foregroundStyle(isIncognito ? Color.white.opacity(0.45) : BrowsePalette.foregroundTertiary)
+            .foregroundStyle(isSheet ? SearchPanelPalette.placeholder : isIncognito ? Color.white.opacity(0.45) : BrowsePalette.foregroundTertiary)
             .lineLimit(1)
             .padding(.leading, CompletingTextField.horizontalInset)
             .allowsHitTesting(false)
@@ -152,18 +146,28 @@ struct SearchTray<Drag: Gesture>: View {
         .fixedSize()
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
-    .padding(.leading, 18)
-    .padding(.trailing, 10)
+    .padding(.leading, isSheet ? BrowseLayout.sheetFieldLeading - CompletingTextField.horizontalInset : 18)
+    .padding(.trailing, isSheet ? BrowseLayout.sheetFieldTrailing : 10)
     .frame(minHeight: fieldHeight)
   }
 
+  @ViewBuilder
   private var fieldFill: some View {
-    Capsule(style: .continuous)
-      .fill(isIncognito ? BrowsePalette.incognitoField : BrowsePalette.searchField)
-      .overlay {
-        Capsule(style: .continuous)
-          .strokeBorder(isIncognito ? Color.white.opacity(0.1) : BrowsePalette.fieldStroke, lineWidth: 0.5)
-      }
+    if isSheet {
+      Capsule(style: .continuous)
+        .fill(isIncognito ? SearchPanelPalette.incognitoField : SearchPanelPalette.field)
+        .overlay {
+          Capsule(style: .continuous)
+            .strokeBorder(SearchPanelPalette.fieldEdge, lineWidth: 1 / max(displayScale, 1))
+        }
+    } else {
+      Capsule(style: .continuous)
+        .fill(isIncognito ? BrowsePalette.incognitoField : BrowsePalette.searchField)
+        .overlay {
+          Capsule(style: .continuous)
+            .strokeBorder(isIncognito ? Color.white.opacity(0.1) : BrowsePalette.fieldStroke, lineWidth: 0.5)
+        }
+    }
   }
 
   private var field: some View {
@@ -178,7 +182,7 @@ struct SearchTray<Drag: Gesture>: View {
       } label: {
         Image(systemName: "xmark.circle.fill")
           .font(.body)
-          .foregroundStyle(isIncognito ? BrowsePalette.incognitoCaption : BrowsePalette.foregroundTertiary)
+          .foregroundStyle(isSheet ? SearchPanelPalette.accessory : isIncognito ? BrowsePalette.incognitoCaption : BrowsePalette.foregroundTertiary)
           .frame(width: 32, height: 40)
           .contentShape(.rect)
       }
@@ -190,14 +194,14 @@ struct SearchTray<Drag: Gesture>: View {
       } label: {
         Image(systemName: "mic")
           .font(.body.weight(.medium))
-          .foregroundStyle(BrowsePalette.foregroundTertiary)
+          .foregroundStyle(isSheet ? SearchPanelPalette.accessory : BrowsePalette.foregroundTertiary)
           .frame(width: 32, height: 40)
           .contentShape(.rect)
       }
       .buttonStyle(.plain)
       .accessibilityLabel("Voice Search")
     }
-    IncognitoToggle(isOn: isIncognito) {
+    IncognitoToggle(isOn: isIncognito, tint: isSheet ? SearchPanelPalette.accessory : BrowsePalette.foregroundTertiary) {
       withAnimation(Motion.modeToggle) { app.isIncognito.toggle() }
     }
   }
@@ -271,7 +275,8 @@ struct SearchTray<Drag: Gesture>: View {
           suggestion: suggestion,
           typed: text,
           isHighlighted: highlightedID == suggestion.id,
-          isIncognito: isIncognito
+          isIncognito: isIncognito,
+          onPanel: isSheet
         )
         .gesture(TapGesture().onEnded { activate(suggestion) }, isEnabled: dynamicTypeSize.isAccessibilitySize)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("rows")) } action: { rowFrames[suggestion.id] = $0 }

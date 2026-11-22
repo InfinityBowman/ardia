@@ -8,14 +8,16 @@ import SwiftUI
     public var iconURL: String?
     public var pageURL: String?
     public var size: CGFloat
+    public var fallbackSymbol: String?
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var loaded: FaviconCache.Entry?
 
-    public init(iconURL: String?, pageURL: String?, size: CGFloat = 16) {
+    public init(iconURL: String?, pageURL: String?, size: CGFloat = 16, fallbackSymbol: String? = nil) {
       self.iconURL = iconURL
       self.pageURL = pageURL
       self.size = size
+      self.fallbackSymbol = fallbackSymbol
     }
 
     public var body: some View {
@@ -29,6 +31,9 @@ import SwiftUI
           } else {
             icon(loaded.image)
           }
+        } else if let fallbackSymbol {
+          Image(systemName: fallbackSymbol)
+            .font(.system(size: size * 0.8))
         } else {
           MonogramTile(pageURL: pageURL)
         }

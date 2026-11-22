@@ -7,19 +7,20 @@ struct SuggestionRowView: View {
   let typed: String
   let isHighlighted: Bool
   let isIncognito: Bool
+  var onPanel = false
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @ScaledMetric(relativeTo: .body) private var pitch = BrowseLayout.suggestionPitch
   @ScaledMetric(relativeTo: .body) private var iconSlot: CGFloat = 22
 
   var body: some View {
-    HStack(spacing: Spacing.small) {
+    HStack(spacing: onPanel ? BrowseLayout.panelRowGap : Spacing.small) {
       leading
         .frame(width: iconSlot, height: iconSlot)
       label
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .padding(.leading, 12)
+    .padding(.leading, onPanel ? BrowseLayout.panelRowLeading : 12)
     .padding(.trailing, 7)
     .frame(minHeight: pitch)
     .background {
@@ -30,18 +31,34 @@ struct SuggestionRowView: View {
   }
 
   private var rowHighlight: Color {
-    isIncognito ? .white.opacity(0.1) : Color.adaptive(light: .black.opacity(0.05), dark: .white.opacity(0.08))
+    if onPanel { return SearchPanelPalette.highlight }
+    return isIncognito ? .white.opacity(0.1) : Color.adaptive(light: .black.opacity(0.05), dark: .white.opacity(0.08))
   }
 
   @ViewBuilder
   private var leading: some View {
-    if suggestion.showsFavicon, let url = suggestion.url {
+    if onPanel {
+      panelLeading
+    } else if suggestion.showsFavicon, let url = suggestion.url {
       FaviconImage(iconURL: suggestion.favicon, pageURL: url, size: iconSlot * 0.82)
     } else {
       Image(systemName: suggestion.symbol)
         .font(.system(size: BrowseLayout.suggestionIcon, weight: .medium))
         .imageScale(.large)
         .foregroundStyle(isIncognito ? AnyShapeStyle(BrowsePalette.incognitoCaption) : AnyShapeStyle(BrowsePalette.rowIcon))
+    }
+  }
+
+  @ViewBuilder
+  private var panelLeading: some View {
+    if suggestion.kind != .url, suggestion.showsFavicon, let url = suggestion.url {
+      FaviconImage(iconURL: suggestion.favicon, pageURL: url, size: iconSlot * BrowseLayout.panelFavicon / 22, fallbackSymbol: "globe")
+        .foregroundStyle(SearchPanelPalette.rowGlyph)
+    } else {
+      Image(systemName: suggestion.symbol)
+        .font(.system(size: BrowseLayout.panelRowGlyph))
+        .imageScale(.large)
+        .foregroundStyle(SearchPanelPalette.rowGlyph)
     }
   }
 
@@ -89,15 +106,20 @@ struct SuggestionRowView: View {
     }
     let prefix = String(title.prefix(typedLower.count))
     let rest = String(title.dropFirst(typedLower.count))
+    if onPanel {
+      return Text("\(Text(prefix).foregroundStyle(primary))\(Text(rest).foregroundStyle(secondary))")
+    }
     return Text("\(Text(prefix).foregroundStyle(secondary))\(Text(rest).foregroundStyle(primary))")
   }
 
   private var primary: Color {
-    isIncognito ? .white.opacity(0.92) : BrowsePalette.foregroundPrimary
+    if onPanel { return SearchPanelPalette.text }
+    return isIncognito ? .white.opacity(0.92) : BrowsePalette.foregroundPrimary
   }
 
   private var secondary: Color {
-    isIncognito ? BrowsePalette.incognitoCaption : BrowsePalette.foregroundSecondary
+    if onPanel { return SearchPanelPalette.secondaryText }
+    return isIncognito ? BrowsePalette.incognitoCaption : BrowsePalette.foregroundSecondary
   }
 }
 

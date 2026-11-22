@@ -45,6 +45,21 @@ public enum BrowsePalette {
   public static let barGlyph = Color.adaptive(light: Color(hex: 0x2F2F2F), dark: .white)
 }
 
+public enum SearchPanelPalette {
+  public static let fill = Color.adaptive(light: Color(hex: 0xF0F0F1), dark: Color(hex: 0x212023))
+  public static let incognitoFill = Color(hex: 0x151517)
+  public static let edge = Color.adaptive(light: .black.opacity(0.06), dark: .white.opacity(0.16))
+  public static let field = Color.adaptive(light: Color(hex: 0xD1D2D2), dark: Color(hex: 0x3A393C))
+  public static let incognitoField = Color(hex: 0x2C2C2F)
+  public static let fieldEdge = Color.adaptive(light: .black.opacity(0.05), dark: .white.opacity(0.17))
+  public static let text = Color.adaptive(light: Color(hex: 0x171717), dark: .white)
+  public static let secondaryText = Color.adaptive(light: .black.opacity(0.5), dark: .white.opacity(0.6))
+  public static let placeholder = Color.adaptive(light: Color(hex: 0x737374), dark: Color(hex: 0x9F9FA6))
+  public static let rowGlyph = Color.adaptive(light: Color(hex: 0x48484A), dark: Color(hex: 0xD0CFD1))
+  public static let accessory = Color.adaptive(light: Color(hex: 0x7A7A7C), dark: Color(hex: 0x979699))
+  public static let highlight = Color.adaptive(light: .black.opacity(0.05), dark: .white.opacity(0.08))
+}
+
 public enum BrowseLayout {
   public static let sheetTopRadius: CGFloat = 40
   public static let sheetTintShare: Double = 0.8
@@ -52,9 +67,12 @@ public enum BrowseLayout {
   public static let searchFieldInset: CGFloat = 15
   public static let suggestionPitch: CGFloat = 56
   public static let suggestionIcon: CGFloat = 15
-  public static let sheetAboveKeyboard: CGFloat = 274
+  public static let sheetAboveKeyboard: CGFloat = 304
   public static let trayFieldTop: CGFloat = 15
   public static let trayDim: Double = 0.28
+  public static let searchOpenResponse: Double = 0.3
+  public static let searchWidenResponse: Double = 0.25
+  public static let searchCloseResponse: Double = 0.3
   public static let logoSize: CGFloat = 132
   public static let barControl: CGFloat = 48
   public static let barGap: CGFloat = 8
@@ -64,7 +82,14 @@ public enum BrowseLayout {
   public static let panelInset: CGFloat = 8
   public static let sheetPanelRadius: CGFloat = 30
   public static let sheetFieldInset: CGFloat = 16
-  public static let sheetFieldTop: CGFloat = 16
+  public static let sheetFieldTop: CGFloat = 17
+  public static let sheetRowsGap: CGFloat = 6.5
+  public static let sheetFieldLeading: CGFloat = 21
+  public static let sheetFieldTrailing: CGFloat = 12
+  public static let panelRowLeading: CGFloat = 10
+  public static let panelRowGap: CGFloat = 9
+  public static let panelRowGlyph: CGFloat = 17
+  public static let panelFavicon: CGFloat = 22
   public static let sheetOverhang: CGFloat = 600
   public static let panelRadius: CGFloat = 26
   public static let panelFieldInset: CGFloat = 9

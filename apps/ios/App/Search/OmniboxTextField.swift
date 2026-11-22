@@ -10,6 +10,7 @@ struct OmniboxTextField: UIViewRepresentable {
   var placeholder: String
   var isIncognito: Bool
   var selectsAllOnFocus: Bool
+  var onPanel = false
   var onSubmit: (String) -> Void
 
   func makeCoordinator() -> Coordinator {
@@ -64,12 +65,14 @@ struct OmniboxTextField: UIViewRepresentable {
     let placeholderStyle = PlaceholderStyle(text: isFocused ? placeholder : "", isIncognito: isIncognito)
     if field.placeholderStyle != placeholderStyle {
       field.placeholderStyle = placeholderStyle
-      let placeholderColor = isIncognito ? UIColor.white.withAlphaComponent(0.45) : UIColor(BrowsePalette.foregroundTertiary)
+      let placeholderColor = onPanel ? UIColor(SearchPanelPalette.placeholder) : isIncognito ? UIColor.white.withAlphaComponent(0.45) : UIColor(BrowsePalette.foregroundTertiary)
       field.attributedPlaceholder = placeholderStyle.text.isEmpty
         ? nil
         : NSAttributedString(string: placeholderStyle.text, attributes: [.foregroundColor: placeholderColor])
     }
-    field.textColor = isIncognito ? .white : UIColor(BrowsePalette.foregroundPrimary)
+    let style: UIUserInterfaceStyle = onPanel && isIncognito ? .dark : .unspecified
+    if field.overrideUserInterfaceStyle != style { field.overrideUserInterfaceStyle = style }
+    field.textColor = onPanel ? UIColor(SearchPanelPalette.text) : isIncognito ? .white : UIColor(BrowsePalette.foregroundPrimary)
     field.tintColor = UIColor(BrowsePalette.searchAccent)
     field.completionColor = UIColor(BrowsePalette.searchAccent).withAlphaComponent(0.3)
     field.keyboardAppearance = isIncognito ? .dark : .default

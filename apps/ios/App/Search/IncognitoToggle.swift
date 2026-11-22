@@ -3,6 +3,7 @@ import SwiftUI
 
 struct IncognitoToggle: View {
   let isOn: Bool
+  var tint = BrowsePalette.foregroundTertiary
   let action: () -> Void
 
   var body: some View {
@@ -17,7 +18,7 @@ struct IncognitoToggle: View {
         Image(systemName: "eyeglasses")
           .font(.system(size: 17, weight: .semibold))
           .frame(width: 22)
-          .foregroundStyle(isOn ? Color.white.opacity(0.85) : BrowsePalette.foregroundTertiary)
+          .foregroundStyle(isOn ? Color.white.opacity(0.85) : tint)
       }
       .padding(.horizontal, 6)
       .frame(minWidth: 36, minHeight: 40)
