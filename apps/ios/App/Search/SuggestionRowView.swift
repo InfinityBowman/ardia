@@ -50,7 +50,7 @@ struct SuggestionRowView: View {
     switch suggestion.kind {
     case .query:
       queryText
-        .font(.title3)
+        .font(.body)
         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
         .fixedSize(horizontal: false, vertical: true)
     default:

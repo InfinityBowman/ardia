@@ -50,7 +50,7 @@ public enum BrowseLayout {
   public static let sheetTintShare: Double = 0.8
   public static let searchFieldHeight: CGFloat = 47.5
   public static let searchFieldInset: CGFloat = 15
-  public static let suggestionPitch: CGFloat = 58.5
+  public static let suggestionPitch: CGFloat = 56
   public static let suggestionIcon: CGFloat = 15
   public static let sheetAboveKeyboard: CGFloat = 274
   public static let trayFieldTop: CGFloat = 15
@@ -62,6 +62,10 @@ public enum BrowseLayout {
   public static let barMenuGlyph: CGFloat = 17
   public static let classicBarShadowRadius: CGFloat = 10
   public static let panelInset: CGFloat = 8
+  public static let sheetPanelRadius: CGFloat = 30
+  public static let sheetFieldInset: CGFloat = 16
+  public static let sheetFieldTop: CGFloat = 16
+  public static let sheetOverhang: CGFloat = 600
   public static let panelRadius: CGFloat = 26
   public static let panelFieldInset: CGFloat = 9
   public static let panelAboveKeyboard: CGFloat = 8

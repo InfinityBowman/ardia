@@ -30,7 +30,7 @@ struct OmniboxTextField: UIViewRepresentable {
     field.enablesReturnKeyAutomatically = true
     field.clearButtonMode = .never
     field.adjustsFontForContentSizeCategory = true
-    field.font = UIFontMetrics(forTextStyle: .title3).scaledFont(for: .systemFont(ofSize: 20))
+    field.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: 17))
     field.setContentHuggingPriority(.defaultLow, for: .horizontal)
     field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     field.addTarget(context.coordinator, action: #selector(Coordinator.editingChanged(_:)), for: .editingChanged)

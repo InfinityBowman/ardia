@@ -575,3 +575,22 @@ Band colour, sampled at x = 120 and 300 (grey average):
   back) thumbnail, over the bar, at rest ≈ 7–9 frames after the zoom starts (≈ 150 ms; the page's own
   zoom takes ≈ 300 ms).
 - **Opening an older card** (625–642): the thumbnails rise from below the screen, §6.3.
+
+### 6.5 Search panel growing out of the + capsule (`s4` plus_tap_open, iPad frames; the iPhone recording has no search)
+
+The owner's recording doesn't open search in Arc, so this follows the iPad stream and §1.3/§2.6, set on the
+iPhone's bar line (§6.1).
+
+- Arc's + capsule leaves the bar and widens into the search field (full width less 16 pt each side,
+  47.5 pt tall) while the sheet's top edge rises from the band to its resting place; the + glyph stays
+  visible inside the capsule for ≈ 7 frames and fades, and the bar's other icons go under the sheet.
+  The field lands on a critically damped spring, response ≈ 175–190 ms (§2.6).
+- Ardia: the sheet is the band's material (the same blur and grey) with a 30 pt top radius, full width,
+  field inset 16 pt from the sides and the top. The growth runs on Core Animation in the keyboard rider:
+  the sheet is revealed by a mask whose top rises from the band top (bar line + 32.75) to the sheet top,
+  and a capsule (75.5 × 39.5, the + glyph inside) widens into the field rect, both on a critically damped
+  spring with response 0.19 s; the glyph fades over 0.12 s and the capsule fades out over 0.08 s once the
+  real field is under it. The text field focuses at once, as before, so the keyboard warm-up and the
+  harness's search-open timing are unchanged.
+- Swiping up from the bar opens the same panel, growing from the + capsule at rest (Ardia's bar doesn't
+  rise with the finger first).

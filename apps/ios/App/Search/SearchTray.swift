@@ -8,9 +8,9 @@ struct SearchTray<Drag: Gesture>: View {
   let maxHeight: CGFloat
   let dismissDrag: Drag
   let pull: TrayPull
+  var barLineAboveBottom: CGFloat?
 
   @Environment(AppModel.self) private var app
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.colorScheme) private var colorScheme
@@ -29,26 +29,19 @@ struct SearchTray<Drag: Gesture>: View {
   @State private var naturalRowsHeight: CGFloat = 0
   @State private var isSubmitting = false
   @ScaledMetric(relativeTo: .title3) private var fieldHeight = BrowseLayout.searchFieldHeight
-  @ScaledMetric(relativeTo: .title3) private var placeholderSize: CGFloat = 20
+  @ScaledMetric(relativeTo: .body) private var placeholderSize: CGFloat = 17
 
   private var isIncognito: Bool { app.isIncognito }
   private var rowsBudget: CGFloat { max(maxHeight - headerHeight, 0) }
 
   var body: some View {
-    VStack(spacing: 0) {
-      header
-      content
-        .frame(maxWidth: .infinity)
-        .frame(height: rowsBudget, alignment: .top)
-        .clipped()
+    Group {
+      if barLineAboveBottom != nil {
+        sheetPanel
+      } else {
+        floatingPanel
+      }
     }
-    .frame(maxWidth: .infinity)
-    .background { panelShape.fill(panelTint) }
-    .clipShape(panelShape)
-    .chromeSurface(in: panelShape, interactive: false, tinted: true)
-    .shadow(color: .black.opacity(isIncognito ? 0.3 : 0.1), radius: 18, y: 4)
-    .padding(.horizontal, BrowseLayout.panelInset)
-    .padding(.bottom, BrowseLayout.panelAboveKeyboard)
     .environment(\.colorScheme, isIncognito ? .dark : colorScheme)
     .onAppear(perform: start)
     .onDisappear { model?.cancel() }
@@ -64,10 +57,56 @@ struct SearchTray<Drag: Gesture>: View {
     .sensoryFeedback(.impact(weight: .light), trigger: scrubReleases)
   }
 
+  private var panelColumn: some View {
+    VStack(spacing: 0) {
+      header
+      content
+        .frame(maxWidth: .infinity)
+        .frame(height: rowsBudget, alignment: .top)
+        .clipped()
+    }
+    .frame(maxWidth: .infinity)
+  }
+
+  private var floatingPanel: some View {
+    panelColumn
+      .background { panelShape.fill(panelTint) }
+      .clipShape(panelShape)
+      .chromeSurface(in: panelShape, interactive: false, tinted: true)
+      .shadow(color: .black.opacity(isIncognito ? 0.3 : 0.1), radius: 18, y: 4)
+      .padding(.horizontal, BrowseLayout.panelInset)
+      .padding(.bottom, BrowseLayout.panelAboveKeyboard)
+  }
+
+  private var sheetPanel: some View {
+    let shape = UnevenRoundedRectangle(topLeadingRadius: BrowseLayout.sheetPanelRadius, topTrailingRadius: BrowseLayout.sheetPanelRadius, style: .continuous)
+    return panelColumn
+      .background(alignment: .top) {
+        sheetFill
+          .clipShape(shape)
+          .padding(.bottom, -BrowseLayout.sheetOverhang)
+          .allowsHitTesting(false)
+      }
+  }
+
+  @ViewBuilder
+  private var sheetFill: some View {
+    if isIncognito {
+      BrowsePalette.incognitoSheet.opacity(reduceTransparency ? 1 : BrowseLayout.panelIncognitoShare)
+    } else if reduceTransparency {
+      look.surface
+    } else {
+      ZStack {
+        BarBackdropBlur()
+        BrowsePalette.barBandTop
+      }
+    }
+  }
+
   private var header: some View {
     field
-      .padding(.horizontal, BrowseLayout.panelFieldInset)
-      .padding(.top, BrowseLayout.panelFieldInset)
+      .padding(.horizontal, barLineAboveBottom == nil ? BrowseLayout.panelFieldInset : BrowseLayout.sheetFieldInset)
+      .padding(.top, barLineAboveBottom == nil ? BrowseLayout.panelFieldInset : BrowseLayout.sheetFieldTop)
       .padding(.bottom, Spacing.hairline)
       .frame(maxWidth: .infinity)
       .contentShape(.rect)
@@ -84,7 +123,7 @@ struct SearchTray<Drag: Gesture>: View {
     return reduceTransparency ? look.surface : look.surface.opacity(BrowseLayout.panelTintShare)
   }
 
-  private var field: some View {
+  private var fieldRow: some View {
     HStack(spacing: Spacing.tight) {
       OmniboxTextField(
         text: $text,
@@ -116,14 +155,19 @@ struct SearchTray<Drag: Gesture>: View {
     .padding(.leading, 18)
     .padding(.trailing, 10)
     .frame(minHeight: fieldHeight)
-    .background {
-      Capsule(style: .continuous)
-        .fill(isIncognito ? BrowsePalette.incognitoField : BrowsePalette.searchField)
-        .overlay {
-          Capsule(style: .continuous)
-            .strokeBorder(isIncognito ? Color.white.opacity(0.1) : BrowsePalette.fieldStroke, lineWidth: 0.5)
-        }
-    }
+  }
+
+  private var fieldFill: some View {
+    Capsule(style: .continuous)
+      .fill(isIncognito ? BrowsePalette.incognitoField : BrowsePalette.searchField)
+      .overlay {
+        Capsule(style: .continuous)
+          .strokeBorder(isIncognito ? Color.white.opacity(0.1) : BrowsePalette.fieldStroke, lineWidth: 0.5)
+      }
+  }
+
+  private var field: some View {
+    fieldRow.background { fieldFill }
   }
 
   @ViewBuilder

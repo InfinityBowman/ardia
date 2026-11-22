@@ -54,7 +54,8 @@ struct SearchTrayHost: View {
             heldLift: heldLift,
             isVisible: shown != nil && !isClosing,
             isInteractive: shown != nil && !isClosing,
-            content: riderContent(maxHeight: maxHeight, progress: progress, liveLift: liveLift)
+            growth: growth(panelHeight: maxHeight, safeBottom: safeBottom),
+            content: riderContent(maxHeight: maxHeight, progress: progress, liveLift: liveLift, safeBottom: safeBottom)
           )
           .ignoresSafeArea()
         } else if let shown {
@@ -101,7 +102,7 @@ struct SearchTrayHost: View {
   }
 
   /// The dim and the tray, laid out for the keyboard rider: the tray ends where the keyboard begins.
-  private func riderContent(maxHeight: CGFloat, progress: CGFloat, liveLift: CGFloat) -> some View {
+  private func riderContent(maxHeight: CGFloat, progress: CGFloat, liveLift: CGFloat, safeBottom: CGFloat) -> some View {
     KeyboardRiderLayout(
       dim: Group {
         if let shown {
@@ -110,7 +111,14 @@ struct SearchTrayHost: View {
       },
       rider: Group {
         if let shown {
-          SearchTray(request: shown, isFocused: $isFocused, maxHeight: maxHeight, dismissDrag: dismissDrag(lift: liveLift), pull: pull(lift: liveLift))
+          SearchTray(
+            request: shown,
+            isFocused: $isFocused,
+            maxHeight: maxHeight,
+            dismissDrag: dismissDrag(lift: liveLift),
+            pull: pull(lift: liveLift),
+            barLineAboveBottom: BrowseLayout.barLine(safeBottom: safeBottom) - safeBottom
+          )
             .id(presentation)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { trayHeight = $0 }
             .offset(y: dragOffset)
@@ -122,6 +130,24 @@ struct SearchTrayHost: View {
     .environment(\.profileLook, look)
     .environment(\.usesGlass, usesGlass)
     .environment(\.screenLayout, screenLayout)
+  }
+
+  private func growth(panelHeight: CGFloat, safeBottom: CGFloat) -> RiderGrowth {
+    let incognito = app.isIncognito
+    return RiderGrowth(
+      panelHeight: panelHeight,
+      lineAboveBottom: BrowseLayout.barLine(safeBottom: safeBottom) - safeBottom,
+      bandAboveBottom: BrowseLayout.barHeight(safeBottom: safeBottom) - safeBottom,
+      fieldTop: BrowseLayout.sheetFieldTop,
+      fieldInset: BrowseLayout.sheetFieldInset,
+      fieldHeight: BrowseLayout.searchFieldHeight * fieldScale,
+      capsule: BrowseLayout.barPlus,
+      glyphSize: BrowseLayout.barPlusGlyph,
+      capsuleFill: UIColor(BrowsePalette.barPlusFill),
+      fieldFill: UIColor(incognito ? BrowsePalette.incognitoField : BrowsePalette.searchField),
+      glyph: UIColor(BrowsePalette.barGlyph),
+      dim: shown?.origin == .page ? BrowseLayout.trayDim : 0
+    )
   }
 
   private var keyboardProbe: some View {
