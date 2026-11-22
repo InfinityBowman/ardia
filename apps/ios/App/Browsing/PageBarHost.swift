@@ -150,10 +150,12 @@ struct PageBarHost<Content: View>: UIViewRepresentable {
   let link: BarScrollLink
   let pager: TabPager
   let fade: CGFloat
+  var register: (UIView) -> Void = { _ in }
   let content: Content
 
   func makeUIView(context: Context) -> PageBarContainer {
     let container = PageBarContainer(rootView: AnyView(content), fade: fade)
+    register(container)
     link.bar = container.hosted
     container.swipe.addTarget(container, action: #selector(PageBarContainer.swiped(_:)))
     container.link = link

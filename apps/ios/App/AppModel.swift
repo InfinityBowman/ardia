@@ -3,6 +3,7 @@ import ArdiaSync
 import Foundation
 import Observation
 import SwiftData
+import UIKit
 
 @MainActor
 @Observable
@@ -46,6 +47,7 @@ final class AppModel {
   var isIncognito = false
   @ObservationIgnored var usesDeckStage = false
   @ObservationIgnored weak var deckStage: DeckStageController?
+  @ObservationIgnored weak var pageBar: UIView?
   @ObservationIgnored var inboxInFlight: Set<UUID> = []
   @ObservationIgnored var inboxSent: Set<UUID> = []
 

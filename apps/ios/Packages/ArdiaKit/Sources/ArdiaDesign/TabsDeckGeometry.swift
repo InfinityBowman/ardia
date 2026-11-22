@@ -118,12 +118,20 @@ public struct TabsDeckGeometry: Equatable, Sendable {
   public var barCenterY: CGFloat { container.height - BrowseLayout.barLine(safeBottom: safeBottom) }
 
   public var tabButtonCenter: CGPoint {
-    CGPoint(x: safeSide + 53.5, y: barCenterY - 4)
+    CGPoint(x: safeSide + BrowseLayout.tabStackFront.x, y: barCenterY + BrowseLayout.tabStackFront.y)
   }
 
   public var tabButtonBackCenter: CGPoint {
-    CGPoint(x: safeSide + 38, y: barCenterY + 1.5)
+    CGPoint(x: safeSide + BrowseLayout.tabStackBack.x, y: barCenterY + BrowseLayout.tabStackBack.y)
   }
+
+  public var launcherScale: CGFloat { BrowseLayout.tabStackTile.width / max(cardSize.width, 1) }
+
+  public var launcherVisibleHeight: CGFloat {
+    min(cardSize.height, BrowseLayout.tabStackTile.height / max(launcherScale, 0.001))
+  }
+
+  public var pageTopShare: CGFloat { safeTop / max(container.height, 1) }
 
   public func scrollDelta(forDrag translation: CGFloat) -> Double {
     Double(-translation / spacing)

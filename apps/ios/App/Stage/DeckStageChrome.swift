@@ -227,6 +227,7 @@ struct PageBarStandIn: View {
       address: BarAddress(tab: tab, page: page),
       sideInset: stage.geometry.safeSide,
       safeBottom: stage.geometry.safeBottom,
+      showsTabStack: false,
       actions: BarActions(onTabs: {}, onAddress: {}, onPlus: {}, onMore: {}, onExpand: {}, onStep: { _ in }, onSelectTab: { _ in }, onCloseTab: {})
     )
     .frame(maxHeight: .infinity, alignment: .bottom)

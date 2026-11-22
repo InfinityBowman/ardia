@@ -29,6 +29,8 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
   private let topChromeShell = PassthroughView()
   private let barShell = PassthroughView()
   private let cardsView = UIView()
+  private let risingThumbnails = [BarThumbnailView(), BarThumbnailView()]
+  private var riseAnimator: UIViewPropertyAnimator?
 
   private var phase: Phase = .hidden
   private var order: [UUID] = []
@@ -85,7 +87,9 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     pageBarShell.isUserInteractionEnabled = false
     pageBarShell.alpha = 0
     pageBarShell.addSubview(pageBar.view)
-    root.addSubview(pageBarShell)
+    for thumbnail in risingThumbnails { pageBarShell.addSubview(thumbnail) }
+    pageBarShell.layer.zPosition = Self.pageBarDepth
+    cardsView.addSubview(pageBarShell)
     for host in [backdrop, topChrome, bar, pageBar, grid] { host.didMove(toParent: self) }
     applyGrid(animated: false)
     view = root
@@ -309,6 +313,13 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     }
     runHome(to: id, duration: Self.landingDuration, timing: Self.landingCurve)
     commitNow()
+    if order.last != id {
+      let generation = transitionGeneration
+      DispatchQueue.main.async { [weak self] in
+        guard let self, case .closing(id) = self.phase, generation == self.transitionGeneration else { return }
+        self.riseThumbnails(opening: id)
+      }
+    }
     app.beginOpening(id)
   }
 
@@ -323,10 +334,13 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
 
   private func runHome(to id: UUID, duration: TimeInterval, timing: UICubicTimingParameters) {
     let generation = beginTransitions()
+    for (index, other) in order.enumerated() where role(for: other, at: index) == .launcher {
+      headers[other]?.alpha = 0
+    }
     let animator = UIViewPropertyAnimator(duration: duration, timingParameters: timing)
     animator.isInterruptible = true
     animator.addAnimations {
-      self.layoutCards(progress: 0)
+      self.layoutCards(progress: 0) { $0 != .launcher }
       self.backdrop.view.alpha = 0
       self.topChromeShell.alpha = 0
       self.layoutHeaders(alpha: 0)
@@ -339,12 +353,20 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       default: break
       }
     }
-    transitions = [animator]
+    let tuck = UIViewPropertyAnimator(duration: duration, timingParameters: Self.spring(response: Self.tuckResponse))
+    tuck.isInterruptible = true
+    tuck.addAnimations { self.layoutCards(progress: 0) { $0 == .launcher } }
+    transitions = [animator, tuck]
     animator.startAnimation()
+    tuck.startAnimation()
   }
 
+  private static let expandedDepth: Double = 100_000
+  private static let pageBarDepth: CGFloat = 150_000
+  private static let landingLauncherDepth: Double = 200_000
   private static let openResponse: Double = 0.19
   private static let flyResponse: Double = 0.28
+  private static let tuckResponse: Double = 0.15
   private static let landingDuration: TimeInterval = 0.34
   private static let landingCurve = UICubicTimingParameters(controlPoint1: CGPoint(x: 0.325, y: 0.525), controlPoint2: CGPoint(x: 0.1, y: 1))
   private static let returnDuration: TimeInterval = 0.3
@@ -465,32 +487,18 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     }
   }
 
-  private struct LaunchAnchor {
-    var expandedIndex: Int?
-    var previous: UUID?
-  }
-
-  private var launchAnchor: LaunchAnchor {
+  private var launchAnchor: Int? {
     switch phase {
-    case .opening(let expanded?), .returning(let expanded):
-      return LaunchAnchor(expandedIndex: order.firstIndex(of: expanded))
-    case .closing(let expanded):
-      return LaunchAnchor(previous: order.last { $0 != expanded })
+    case .opening(let expanded?), .returning(let expanded), .closing(let expanded):
+      return order.firstIndex(of: expanded)
     default:
-      return LaunchAnchor()
+      return nil
     }
   }
 
-  private func launchDepth(for id: UUID, at index: Int, anchor: LaunchAnchor) -> Int {
-    switch phase {
-    case .opening, .returning:
-      guard let expandedIndex = anchor.expandedIndex else { return 1 }
-      return max(expandedIndex - 1 - index, 0)
-    case .closing:
-      return id == anchor.previous ? 0 : 1
-    default:
-      return 0
-    }
+  private func launchDepth(at index: Int, anchor: Int?) -> Int {
+    guard let anchor else { return 1 }
+    return max(anchor - 1 - index, 0)
   }
 
   private func launchRole(for id: UUID, at index: Int, expanded: UUID?) -> DeckRole {
@@ -514,15 +522,17 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       guard visible else { continue }
       let relative = Double(index) - scroll
       let motion = DeckMotion(relative: relative, scaleProgress: progress, positionProgress: progress, lift: Double(lifts[id] ?? 0), vanish: 0)
-      let depth = role == .launcher ? launchDepth(for: id, at: index, anchor: anchor) : 0
+      let depth = role == .launcher ? launchDepth(at: index, anchor: anchor) : 0
       let pose = DeckPose.resolve(motion, role: role, geometry: geometry, isLast: index == order.count - 1, end: end, launchDepth: depth)
-      card.center = pose.center
+      let visibleHeight = pose.visibleHeight ?? geometry.cardSize.height
+      let cropShift = (geometry.cardSize.height - visibleHeight) / 2 * pose.scale
+      card.center = CGPoint(x: pose.center.x - sin(pose.rotation) * cropShift, y: pose.center.y + cos(pose.rotation) * cropShift)
       card.transform = CGAffineTransform(rotationAngle: pose.rotation).scaledBy(x: pose.scale, y: pose.scale)
       card.setCorner(pose.corner / max(pose.scale, 0.01), edge: 0.5 / max(pose.scale, 0.01))
       card.setDim(pose.dim)
-      card.setTop(extension: geometry.cardTopExtension, reveal: pose.reveal)
+      card.setClip(topExtension: geometry.cardTopExtension, reveal: pose.reveal, visibleHeight: visibleHeight)
       card.alpha = pose.opacity
-      let expanded = role == .expanded ? 100_000.0 : (role == .launcher && isLanding ? 200_000.0 : 0)
+      let expanded = role == .expanded ? Self.expandedDepth : (role == .launcher && isLanding && depth <= 1 ? Self.landingLauncherDepth : 0)
       card.layer.zPosition = CGFloat(Double(index) * 2 + expanded)
       header.layer.zPosition = CGFloat(Double(index) * 2 + 1 + expanded)
       let cardHeight = geometry.cardSize.height * pose.scale
@@ -616,12 +626,48 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     (view as? AccessibilityGate)?.isOpen = visible
     view.accessibilityViewIsModal = visible
     stage.set(\.isPresented, visible)
+    app.pageBar?.alpha = visible ? 0 : 1
   }
 
   private func setPageBar(_ page: Bool) {
     barShell.alpha = page ? 0 : 1
     barShell.isUserInteractionEnabled = !page
     pageBarShell.alpha = page ? 1 : 0
+    stopRise()
+  }
+
+  private static let riseDistance: CGFloat = 72
+  private static let riseDelay: TimeInterval = 0.05
+  private static let riseResponse: Double = 0.19
+
+  private func riseThumbnails(opening id: UUID) {
+    stopRise()
+    let others = order.filter { $0 != id }
+    let picks = [others.count > 1 ? others[others.count - 2] : nil, others.last]
+    let places = [(geometry.tabButtonBackCenter, DeckPose.backTilt), (geometry.tabButtonCenter, DeckPose.frontTilt)]
+    for ((view, pick), place) in zip(zip(risingThumbnails, picks), places) {
+      guard let pick, let tab = app.tabs.tab(pick), !UIAccessibility.isReduceMotionEnabled else { continue }
+      view.configure(image: thumbnail(for: tab), fill: UIColor(BarPalette.tileFill), pageTopShare: geometry.pageTopShare)
+      view.transform = .identity
+      view.center = place.0
+      view.transform = CGAffineTransform(rotationAngle: place.1).concatenating(CGAffineTransform(translationX: 0, y: Self.riseDistance))
+      view.isHidden = false
+    }
+    let animator = UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: Self.riseResponse))
+    animator.isInterruptible = true
+    animator.addAnimations {
+      for (view, place) in zip(self.risingThumbnails, places) where !view.isHidden {
+        view.transform = CGAffineTransform(rotationAngle: place.1)
+      }
+    }
+    riseAnimator = animator
+    animator.startAnimation(afterDelay: Self.riseDelay)
+  }
+
+  private func stopRise() {
+    if let animator = riseAnimator, animator.state == .active { animator.stopAnimation(true) }
+    riseAnimator = nil
+    for view in risingThumbnails { view.isHidden = true }
   }
 
   private func commitNow() {

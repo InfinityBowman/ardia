@@ -13,6 +13,7 @@ struct BottomBar: View {
   var arrangement = Arrangement.row
   var sideInset: CGFloat = 0
   var safeBottom: CGFloat = 0
+  var showsTabStack = true
   let actions: BarActions
 
   var body: some View {
@@ -30,7 +31,7 @@ struct BottomBar: View {
 
   private var rowBar: some View {
     ZStack {
-      BarTabsStackButton(actions: actions)
+      BarTabsStackButton(actions: actions, showsStack: showsTabStack)
         .frame(maxWidth: .infinity, alignment: .leading)
       BarPlusCapsule(action: actions.onPlus)
       BarPageMenuButton(address: address, action: actions.onMore)
@@ -127,38 +128,49 @@ struct TabStackGlyph: View {
 struct ArcTabStack: View {
   let back: BrowserTab?
   let front: BrowserTab?
+  var isShown = true
 
   var body: some View {
     let width = BrowseLayout.tabsButtonWidth
     let height = BrowseLayout.barControl
     let origin = CGPoint(x: BrowseLayout.barSide, y: height / 2)
     ZStack(alignment: .topLeading) {
-      if let back {
-        TabThumbnail(tab: back)
-          .rotationEffect(.degrees(BrowseLayout.tabStackBackTilt))
-          .position(x: BrowseLayout.tabStackBack.x - origin.x, y: origin.y + BrowseLayout.tabStackBack.y)
-      }
-      if let front {
-        TabThumbnail(tab: front)
-          .rotationEffect(.degrees(BrowseLayout.tabStackFrontTilt))
-          .position(x: BrowseLayout.tabStackFront.x - origin.x, y: origin.y + BrowseLayout.tabStackFront.y)
-      } else {
-        RoundedRectangle(cornerRadius: BrowseLayout.tabStackRadius, style: .continuous)
-          .strokeBorder(BrowsePalette.barGlyph, lineWidth: 1.5)
-          .frame(width: BrowseLayout.tabStackTile.width, height: BrowseLayout.tabStackTile.height)
-          .rotationEffect(.degrees(BrowseLayout.tabStackFrontTilt))
-          .position(x: BrowseLayout.tabStackFront.x - origin.x, y: origin.y + BrowseLayout.tabStackFront.y)
-      }
+      if isShown { tiles(origin: origin) }
     }
     .frame(width: width, height: height)
     .accessibilityHidden(true)
   }
+
+  @ViewBuilder
+  private func tiles(origin: CGPoint) -> some View {
+    if let back {
+      TabThumbnail(tab: back)
+        .rotationEffect(.degrees(BrowseLayout.tabStackBackTilt))
+        .position(x: BrowseLayout.tabStackBack.x - origin.x, y: origin.y + BrowseLayout.tabStackBack.y)
+    }
+    if let front {
+      TabThumbnail(tab: front)
+        .rotationEffect(.degrees(BrowseLayout.tabStackFrontTilt))
+        .position(x: BrowseLayout.tabStackFront.x - origin.x, y: origin.y + BrowseLayout.tabStackFront.y)
+    } else {
+      RoundedRectangle(cornerRadius: BrowseLayout.tabStackRadius, style: .continuous)
+        .strokeBorder(BrowsePalette.barGlyph, lineWidth: 1.5)
+        .frame(width: BrowseLayout.tabStackTile.width, height: BrowseLayout.tabStackTile.height)
+        .rotationEffect(.degrees(BrowseLayout.tabStackFrontTilt))
+        .position(x: BrowseLayout.tabStackFront.x - origin.x, y: origin.y + BrowseLayout.tabStackFront.y)
+    }
+  }
+}
+
+extension EnvironmentValues {
+  @Entry var pageTopShare: CGFloat = 62.0 / 874.0
 }
 
 struct TabThumbnail: View {
   let tab: BrowserTab
 
   @Environment(AppModel.self) private var app
+  @Environment(\.pageTopShare) private var pageTopShare
   @State private var image: CGImage?
 
   private var shape: RoundedRectangle {
@@ -169,15 +181,9 @@ struct TabThumbnail: View {
     let size = BrowseLayout.tabStackTile
     ZStack {
       if let memory = app.browse.covers.image(for: tab.id) ?? app.deck.memoryImage(for: tab.id) {
-        Image(uiImage: memory)
-          .resizable()
-          .scaledToFill()
-          .frame(width: size.width, height: size.height, alignment: .top)
+        pageTop(Image(uiImage: memory), aspect: memory.size.height / max(memory.size.width, 1))
       } else if let image {
-        Image(decorative: image, scale: 1)
-          .resizable()
-          .scaledToFill()
-          .frame(width: size.width, height: size.height, alignment: .top)
+        pageTop(Image(decorative: image, scale: 1), aspect: CGFloat(image.height) / CGFloat(max(image.width, 1)))
       } else {
         fallback
       }
@@ -194,6 +200,16 @@ struct TabThumbnail: View {
       image = app.web.snapshots.cachedImage(named: name)
       if image == nil { image = await app.web.snapshots.image(named: name) }
     }
+  }
+
+  private func pageTop(_ image: Image, aspect: CGFloat) -> some View {
+    let size = BrowseLayout.tabStackTile
+    let height = max(size.width * aspect, size.height / max(1 - pageTopShare, 0.01))
+    return image
+      .resizable()
+      .frame(width: size.width, height: height)
+      .offset(y: -height * pageTopShare)
+      .frame(width: size.width, height: size.height, alignment: .top)
   }
 
   @ViewBuilder

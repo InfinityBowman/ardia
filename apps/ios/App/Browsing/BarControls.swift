@@ -62,6 +62,7 @@ struct BarTabsButton: View {
 
 struct BarTabsStackButton: View {
   let actions: BarActions
+  var showsStack = true
 
   @Environment(AppModel.self) private var app
 
@@ -71,7 +72,7 @@ struct BarTabsStackButton: View {
     let front = others.last ?? order.last
     let back = others.count > 1 ? others[others.count - 2] : nil
     Button(action: actions.onTabs) {
-      ArcTabStack(back: back, front: front)
+      ArcTabStack(back: back, front: front, isShown: showsStack)
         .contentShape(.rect)
     }
     .buttonStyle(BarButtonStyle())

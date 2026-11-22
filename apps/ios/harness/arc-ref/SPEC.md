@@ -561,3 +561,17 @@ Band colour, sampled at x = 120 and 300 (grey average):
   they are small, at rest by ≈ frame 507 (≈ 170 ms).
 - Ardia before this round: every other card flew to the tabs button above the tapped card, so the newest
   card crossed in front of it (frames 34–40).
+
+### 6.4 The tabs button's thumbnails (frames 471–507, 625–642, 660)
+
+- **At rest** (frame 660, corners read off a 12× zoom): the front thumbnail is **24.5 × 27 pt**, tilted
+  **+9°**, centred at (54.3, line − 5.1); the back one is ≈ 24.5 × 27.5 pt, tilted **−18°**, centred at
+  (40, line + 3); corner radius ≈ 3.5–4. They show the top of each page below the status bar. (iPad §1.1:
+  28 × 29 at +8°.)
+- **Opening the switcher** (471–476): the thumbnails leave the button at once and *are* the n−1 and n−2
+  cards: they grow and untilt into their deck slots while the page shrinks into its own; the monitor
+  circle replaces them in the same frame. The page underneath does not show through.
+- **Opening the newest card** (497–507): the n−1 (and n−2) cards shrink and re-tilt into the front (and
+  back) thumbnail, over the bar, at rest ≈ 7–9 frames after the zoom starts (≈ 150 ms; the page's own
+  zoom takes ≈ 300 ms).
+- **Opening an older card** (625–642): the thumbnails rise from below the screen, §6.3.

@@ -13,6 +13,7 @@ struct BrowsingView: View {
   @State private var barVisibility = BottomBarVisibility()
   @State private var pageSpan = PageSpan(width: 402, safeSide: 0)
   @State private var homeInset: CGFloat = 34
+  @State private var pageTopShare: CGFloat = 62.0 / 874.0
   @State private var barLink = BarScrollLink()
   @State private var storedCover: StoredCover?
   @Environment(\.screenLayout) private var screenLayout
@@ -54,6 +55,10 @@ struct BrowsingView: View {
       let insets = proxy.safeAreaInsets
       return PageSpan(width: proxy.size.width + insets.leading + insets.trailing, safeSide: max(insets.leading, insets.trailing))
     } action: { pageSpan = $0 }
+    .onGeometryChange(for: CGFloat.self) { proxy in
+      let insets = proxy.safeAreaInsets
+      return insets.top / max(proxy.size.height + insets.top + insets.bottom, 1)
+    } action: { pageTopShare = $0 }
     .modifier(PageRequestAlert(page: currentWebPage))
     .sheet(isPresented: $browse.isToolbarPresented) {
       if let id = app.tabs.selectedTabID {
@@ -268,8 +273,10 @@ struct BrowsingView: View {
     .environment(\.profileLook, look)
     .environment(\.usesGlass, usesGlass)
     .environment(\.screenLayout, screenLayout)
+    .environment(\.pageTopShare, pageTopShare)
     barLink.onSwipeUp = { pager.landNow(); openSearch() }
-    return PageBarHost(link: barLink, pager: pager, fade: BrowseLayout.barFade, content: content)
+    let app = app
+    return PageBarHost(link: barLink, pager: pager, fade: BrowseLayout.barFade, register: { app.pageBar = $0 }, content: content)
       .frame(height: height + BrowseLayout.barFade)
       .offset(y: isRowBarShown ? 0 : height + BrowseLayout.barFade)
       .opacity(isRowBarShown ? 1 : 0)

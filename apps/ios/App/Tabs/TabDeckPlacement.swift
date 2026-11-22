@@ -59,12 +59,12 @@ nonisolated struct DeckPose {
   var rotation: CGFloat = 0
   var dim: CGFloat = 0
   var reveal: CGFloat = 0
+  var visibleHeight: CGFloat?
   var headerOpacity: Double
   var visibleWidth: CGFloat
 
-  static let launcherWidth: CGFloat = 28
-  static let frontTilt: CGFloat = 8 * .pi / 180
-  static let backTilt: CGFloat = -18 * .pi / 180
+  static let frontTilt = CGFloat(BrowseLayout.tabStackFrontTilt * .pi / 180)
+  static let backTilt = CGFloat(BrowseLayout.tabStackBackTilt * .pi / 180)
 
   static func resolve(_ motion: DeckMotion, role: DeckRole, geometry: TabsDeckGeometry, isLast: Bool, end: CGFloat = 0, launchDepth: Int = 0) -> DeckPose {
     let deckCenter = geometry.center(at: motion.relative, end: end)
@@ -78,6 +78,7 @@ nonisolated struct DeckPose {
     var rotation: CGFloat = 0
     var dim = geometry.dim(at: motion.relative)
     var reveal: CGFloat = 0
+    var visibleHeight: CGFloat?
     switch role {
     case .stay:
       break
@@ -89,13 +90,13 @@ nonisolated struct DeckPose {
       dim *= scaleT
     case .launcher:
       let front = launchDepth == 0
-      let start = launcherWidth / max(geometry.cardSize.width, 1)
-      scale = lerp(start, deckScale, scaleT)
+      scale = lerp(geometry.launcherScale, deckScale, scaleT)
+      if launchDepth <= 1 { visibleHeight = lerp(geometry.launcherVisibleHeight, geometry.cardSize.height, positionT) }
       center = lerp(front ? geometry.tabButtonCenter : geometry.tabButtonBackCenter, deckCenter, positionT)
-      corner = lerp(4, TabsLayout.cardRadius * deckScale, scaleT)
+      corner = lerp(BrowseLayout.tabStackRadius, TabsLayout.cardRadius * deckScale, scaleT)
       rotation = (front ? frontTilt : backTilt) * (1 - positionT)
       dim *= scaleT
-      opacity = min(1, max(0, motion.scaleProgress) * 5)
+      if launchDepth > 1 { opacity = min(1, max(0, motion.scaleProgress) * 5) }
     case .slideLeft:
       center.x -= (1 - positionT) * geometry.container.width
     case .slideRight:
@@ -116,6 +117,7 @@ nonisolated struct DeckPose {
       rotation: rotation,
       dim: dim,
       reveal: reveal,
+      visibleHeight: visibleHeight,
       headerOpacity: min(1, settle) * min(1, liftFade) * Double(1 - vanish) * tuckFade,
       visibleWidth: geometry.visibleWidth(at: motion.relative, isLast: isLast, end: end)
     )

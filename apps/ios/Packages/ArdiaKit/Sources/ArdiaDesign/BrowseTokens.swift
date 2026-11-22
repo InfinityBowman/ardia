@@ -68,10 +68,10 @@ public enum BrowseLayout {
   public static let panelTintShare: Double = 0.55
   public static let panelIncognitoShare: Double = 0.85
   public static let tabStackRadius: CGFloat = 4
-  public static let tabStackTile = CGSize(width: 28, height: 29)
-  public static let tabStackFront = CGPoint(x: 53.5, y: -4)
-  public static let tabStackBack = CGPoint(x: 38, y: 1.5)
-  public static let tabStackFrontTilt: Double = 8
+  public static let tabStackTile = CGSize(width: 24.5, height: 27)
+  public static let tabStackFront = CGPoint(x: 54.3, y: -5.1)
+  public static let tabStackBack = CGPoint(x: 40, y: 3)
+  public static let tabStackFrontTilt: Double = 9
   public static let tabStackBackTilt: Double = -18
   public static let tabsButtonWidth: CGFloat = 64
   public static let barLineAboveHomeIndicator: CGFloat = 10.25

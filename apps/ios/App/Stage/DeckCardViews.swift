@@ -6,6 +6,7 @@ import UIKit
 final class DeckCardView: UIView {
   let tabID: UUID
   private let content = UIView()
+  private let shadowView = UIImageView(image: DeckCardShadow.image)
   private let imageView = UIImageView()
   private let placeholder = DeckCardPlaceholderView()
   private let shade = UIView()
@@ -13,14 +14,13 @@ final class DeckCardView: UIView {
   private(set) var hasImage = false
   private var topExtension: CGFloat = 0
   private var reveal: CGFloat = 0
+  private var visibleHeight: CGFloat?
 
   init(tabID: UUID, size: CGSize) {
     self.tabID = tabID
     super.init(frame: CGRect(origin: .zero, size: size))
-    layer.shadowColor = UIColor.black.cgColor
-    layer.shadowOpacity = 0.18
-    layer.shadowRadius = 18
-    layer.shadowOffset = CGSize(width: -2, height: 4)
+    shadowView.isUserInteractionEnabled = false
+    addSubview(shadowView)
     content.clipsToBounds = true
     content.layer.cornerCurve = .continuous
     content.layer.cornerRadius = TabsLayout.cardRadius
@@ -46,14 +46,15 @@ final class DeckCardView: UIView {
     self.transform = .identity
     bounds = CGRect(origin: .zero, size: size)
     self.transform = transform
-    layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: TabsLayout.cardRadius).cgPath
     layoutContent()
   }
 
-  func setTop(extension height: CGFloat, reveal amount: CGFloat) {
-    guard height != topExtension || amount != reveal else { return }
+  func setClip(topExtension height: CGFloat, reveal amount: CGFloat, visibleHeight visible: CGFloat) {
+    let clipped = visible < bounds.height - 0.01 ? visible : nil
+    guard height != topExtension || amount != reveal || clipped != visibleHeight else { return }
     topExtension = height
     reveal = amount
+    visibleHeight = clipped
     layoutContent()
   }
 
@@ -62,7 +63,8 @@ final class DeckCardView: UIView {
   private var imageTop: CGFloat { revealedTop - topExtension }
 
   private func layoutContent() {
-    content.frame = CGRect(x: 0, y: -revealedTop, width: bounds.width, height: bounds.height + revealedTop)
+    content.frame = CGRect(x: 0, y: -revealedTop, width: bounds.width, height: (visibleHeight ?? bounds.height) + revealedTop)
+    shadowView.frame = DeckCardShadow.frame(around: content.frame)
     placeholder.frame = CGRect(x: 0, y: revealedTop, width: bounds.width, height: bounds.height)
     shade.frame = content.bounds
     layoutImage()
@@ -137,6 +139,80 @@ final class DeckCardView: UIView {
   override func traitCollectionDidChange(_ previous: UITraitCollection?) {
     super.traitCollectionDidChange(previous)
     content.layer.borderColor = UIColor(TabsPalette.cardEdge).resolvedColor(with: traitCollection).cgColor
+  }
+}
+
+enum DeckCardShadow {
+  static let blur: CGFloat = 18
+  static let offset = CGSize(width: -2, height: 4)
+  static let opacity: CGFloat = 0.18
+  static let corner = TabsLayout.cardRadius
+  static let pad = blur * 2
+
+  static let image: UIImage = {
+    let edge = pad + corner
+    let size = CGSize(width: edge * 2 + 1, height: edge * 2 + 1)
+    let format = UIGraphicsImageRendererFormat.preferred()
+    format.opaque = false
+    let away: CGFloat = 10_000
+    let drawn = UIGraphicsImageRenderer(size: size, format: format).image { context in
+      let cg = context.cgContext
+      cg.setShadow(offset: CGSize(width: away, height: 0), blur: blur, color: UIColor.black.withAlphaComponent(opacity).cgColor)
+      UIColor.black.setFill()
+      UIBezierPath(roundedRect: CGRect(x: pad - away, y: pad, width: corner * 2 + 1, height: corner * 2 + 1), cornerRadius: corner).fill()
+    }
+    return drawn.resizableImage(withCapInsets: UIEdgeInsets(top: edge, left: edge, bottom: edge, right: edge), resizingMode: .stretch)
+  }()
+
+  static func frame(around card: CGRect) -> CGRect {
+    card.offsetBy(dx: offset.width, dy: offset.height).insetBy(dx: -pad, dy: -pad)
+  }
+}
+
+final class BarThumbnailView: UIView {
+  private let clip = UIView()
+  private let imageView = UIImageView()
+
+  init() {
+    super.init(frame: CGRect(origin: .zero, size: BrowseLayout.tabStackTile))
+    clip.frame = bounds
+    clip.clipsToBounds = true
+    clip.layer.cornerRadius = BrowseLayout.tabStackRadius
+    clip.layer.cornerCurve = .continuous
+    clip.layer.borderWidth = 0.5
+    imageView.contentMode = .scaleToFill
+    clip.addSubview(imageView)
+    addSubview(clip)
+    layer.shadowColor = UIColor.black.cgColor
+    layer.shadowOpacity = 0.18
+    layer.shadowRadius = 2
+    layer.shadowOffset = CGSize(width: 0, height: 1)
+    layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: BrowseLayout.tabStackRadius).cgPath
+    isUserInteractionEnabled = false
+    isHidden = true
+    applyEdge()
+  }
+
+  required init?(coder: NSCoder) { nil }
+
+  func configure(image: UIImage?, fill: UIColor, pageTopShare: CGFloat) {
+    clip.backgroundColor = fill
+    imageView.image = image
+    guard let image, image.size.width > 0 else {
+      imageView.frame = .zero
+      return
+    }
+    let height = max(bounds.width * image.size.height / image.size.width, bounds.height / max(1 - pageTopShare, 0.01))
+    imageView.frame = CGRect(x: 0, y: -height * pageTopShare, width: bounds.width, height: height)
+  }
+
+  private func applyEdge() {
+    clip.layer.borderColor = UIColor(BarPalette.tileEdge).resolvedColor(with: traitCollection).cgColor
+  }
+
+  override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+    super.traitCollectionDidChange(previous)
+    applyEdge()
   }
 }
 
