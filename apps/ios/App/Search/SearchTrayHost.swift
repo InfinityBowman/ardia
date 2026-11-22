@@ -86,7 +86,10 @@ struct SearchTrayHost: View {
       }
     }
     .ignoresSafeArea(.keyboard)
-    .onAppear { keyboard.start() }
+    .onAppear {
+      keyboard.start()
+      KeyboardPrewarm.schedule()
+    }
     .task { await SearchSuggestionsModel.loadRecents(from: app.tabs) }
     .onChange(of: app.browse.search, initial: true) { _, request in
       if let request {

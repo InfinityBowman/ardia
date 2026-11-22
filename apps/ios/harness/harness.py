@@ -486,6 +486,17 @@ def analyse_probe(events, t0=None):
     pair("deck.cardTap", "deck.closed", "deck.cardTap->deck.closed_ms")
     pair("deck.cardTap", "openTab", "deck.cardTap->openTab_ms")
     pair("deck.return", "openTab", "deck.return->openTab_ms")
+    pair("search.open", "keyboard.willShow", "search.open->keyboard_ms")
+    keyboard_passes = []
+    for m in marks:
+        if m["name"] != "search.open":
+            continue
+        shown = next((n for n in marks if n["name"] == "keyboard.willShow" and n["t"] >= m["t"]), None)
+        if shown:
+            inside = [(e["e"] - e["s"]) * 1000 for e in busy if e["e"] >= m["t"] - 0.05 and e["s"] <= shown["t"]]
+            keyboard_passes.append(round(max(inside, default=0), 1))
+    if keyboard_passes:
+        latencies["search.open->keyboard_worst_pass_ms"] = keyboard_passes
     touches = [e["t"] for e in events if e.get("k") == "touch" and e.get("phase") == "began"]
     first_moves = []
     for m in marks:

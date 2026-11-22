@@ -53,6 +53,12 @@ final class HarnessProbe {
     NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated { self?.flush() }
     }
+    NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { _ in
+      MainActor.assumeIsolated { HarnessProbe.mark("keyboard.willShow") }
+    }
+    NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { _ in
+      MainActor.assumeIsolated { HarnessProbe.mark("keyboard.willHide") }
+    }
   }
 
   private func time() -> String { String(format: "%.6f", CACurrentMediaTime()) }

@@ -52,6 +52,7 @@ struct OmniboxTextField: UIViewRepresentable {
     if isFocused, !field.isFirstResponder, field.window != nil {
       DispatchQueue.main.async {
         guard self.isFocused, !field.isFirstResponder else { return }
+        HarnessProbe.mark("search.focus")
         field.becomeFirstResponder()
       }
     } else if !isFocused, field.isFirstResponder {
