@@ -313,6 +313,111 @@ The web view took it as a horizontal pan of the wide desktop page: the content s
 the wallpaper showed at the window's right edge, then it snapped back ≈ 640 ms later. Arc has no
 edge-swipe gesture of its own here. Whether it has one on a tab with history wasn't tested.
 
+### 2.10 Release points with variable-speed drags (third session, 21:40–22:05; streams `m1`, `m2`, `m3`, `m4`)
+
+#### Variable-speed drags with AXe on a physical device
+
+- **What doesn't work:**
+  - Held-touch moves don't work on a physical iPad. Selected input (contact tokens) is
+    simulator-only: AXe 2.0.4 refuses it with "Use ordinary input and default batch settings on a
+    physical device" or "Physical input uses coordinates without --agent or simulator display
+    selection".
+  - A legacy batch accepts only `touch --down` at A followed by `touch --up` at B. A second `--down`
+    (a move), or a `swipe` or `drag` while the contact is held, fails with "Device touch steps must use
+    matching down, move, and up contacts".
+- **What works:** `axe draw x,y x,y … --duration T` sends one finger along a polyline, and **time is
+  shared along the path by distance, at constant speed** (verified: a stroke with a mid-path cluster
+  of points showed no pause).
+  - **Holding still:** repeated points are refused, so append N points that alternate 0.5 pt
+    *across* the drag axis. Each costs 0.5 pt of path, so the finger stays put for about
+    0.5·N / speed.
+  - **Reversing:** add a leg in the opposite direction.
+  - The builder is `runs/arc-ref/tools/prof.py`, the trial driver (with screenshot-diff commit
+    detection) is `matrix.py`, and the trial JSON is `runs/arc-ref/vid/m1.json` and `m2.json`. Those
+    files are git-ignored and live only on this Mac.
+- **Precision measured on the device** (`t1`, `t3`, and the trials below):
+  - **Move events:** about every 17–25 ms (40–60 Hz), in steps of 5–12 pt depending on speed.
+  - **Speed:** about **0.80–0.85×** what `--duration` asks for (300 → 240 pt/s; 600 → ~510 pt/s).
+  - **Fit to a straight line:** 2.5 pt rms (5.5 pt max) residual, i.e. **±1 event (~±20 ms)**.
+    Occasional gaps of 50–70 ms with no move (one in ~15 strokes).
+  - **Holds overrun:** a "0.3 s" hold of 360 points lasted **0.47–0.70 s**, about 1 ms of overhead
+    per point.
+  - **Start latency:** the first move lands 190–270 ms after the command starts.
+  - **Release:** lifting from a hold gives zero release velocity (no fling on a web view). Lifting
+    mid-leg carries that leg's velocity, and a reversal leg of ≥ 30 pt flips it.
+  - **Verdict: precise enough for release-point work.** Distances are good to about one event,
+    roughly ±10 pt. Speeds should be quoted as measured, not as requested.
+- **Pitfall:** check that the bar is showing before a bar trial. My first `m1` run went to a page
+  whose bar had scrolled away (`m1_invalid_bar_hidden.h264`) and was discarded.
+
+#### Bar swipe release matrix (`m1`; Lighthouse, the newest of 4 tabs, finger moving right toward the older tab; start window x 100, y 849; requested 600 pt/s, observed ≈ 510 pt/s)
+
+Page offset is the page's left edge, found as the strongest vertical edge in each frame.
+
+| Profile | Finger travel | Page offset at release | Result | After release |
+|---|---|---|---|---|
+| fast, **stop dead, hold ≈ 0.5 s**, lift | 30 pt | 0 (pan never began) | nothing | — |
+| | 60 pt | 47 pt | **snap back** | 50 % 103 ms, 90 % 154 ms, ≤ 3 pt at 170 ms; spring ζ ≈ 0.84, response ≈ 295 ms |
+| | 90 pt | 77 pt | **snap back** | 50 % ≈ 45 ms, 90 % ≈ 130 ms, ≤ 3 pt at ≈ 150 ms |
+| | 120 pt | **107 pt** (27 % of width) | **snap back** | 50 % ≈ 54 ms, 90 % ≈ 129 ms, ≤ 3 pt at ≈ 167 ms; ζ ≈ 0.92, response ≈ 230 ms |
+| fast, **lift while moving** | 30 pt | 0 | nothing | — |
+| | 60 pt | 33 pt | **snap back** | 50 % 81 ms, 90 % 149 ms, rest at ≈ 150 ms; ζ ≈ 0.88, response ≈ 280 ms |
+| | 90 pt | 60 pt | **commit** | |
+| | 120 pt | 78 pt | **commit** | (`v-held-bar-lift90-commit.jpg`) |
+| fast, **reverse**, lift | +60 / −30 | 27 → back | **snap back** | rest ≈ 140 ms after the turn |
+| | +90 / −45 | 58 → back | **snap back** | rest ≈ 200 ms after the turn |
+| | +120 / −60 | 76 → back | **snap back** | rest ≈ 235 ms after the turn |
+| | +120 / −100 | 88 → back | **snap back** | rest ≈ 285 ms after the turn |
+
+Together with §2.4 (slow 180 pt at ≈ 180 pt/s committed, with ≈ 160 pt page offset still moving):
+
+- **The release decision is driven by velocity, not position.** A page stopped at 107 pt snaps back,
+  while a page still moving at ≈ 500 pt/s commits from 60 pt. Any reversal before lift snaps back,
+  even from 88 pt.
+- At ≈ 500 pt/s the commit point lies between **33 and 60 pt** of page offset (60–90 pt of finger
+  travel).
+- *Inference, not measured:* this fits a projected-position rule, offset + v·k ≥ about half the
+  width, with k ≈ 0.25–0.33 s.
+- **Following:** the page follows the finger with an **eased lag**, not rigidly. With the finger at
+  constant speed, the offset decelerates into its final value over ~150–250 ms, and the plateau sits
+  10–15 pt short of the finger (touch slop).
+- **Snap-back:** critically to slightly under-damped (ζ ≈ 0.84–0.92), response ≈ 230–295 ms, no visible
+  overshoot. It is at rest **150–170 ms** after release from a hold.
+
+#### Card flick-close matrix (`m2`, `m3`, `m4`; focused n−1 card, finger moving up from window y 519)
+
+The card follows the finger ≈ 1 : 1 (it ends 11–14 pt short of the finger: slop).
+
+| Profile | Finger travel | Card displacement at release | Result | After release |
+|---|---|---|---|---|
+| fast, **stop dead, hold 0.65–0.70 s**, lift | 100 pt | 89 pt | **snap back** | 50 % 108 ms, 90 % 184 ms, ≤ 1 pt at 258 ms; ζ ≈ 0.88, response ≈ 320 ms |
+| | 115 pt | 104 pt | **snap back** | 50 % 51, 90 % 132, ≤ 1 pt at 199 ms; ζ 1.0, response ≈ 200 ms |
+| | 130 pt | 118 pt | **snap back** | 50 % 67, 90 % 132, ≤ 1 pt at 199 ms; ζ 1.0, response ≈ 218 ms |
+| | 150 pt | ≥ 136 pt (card top reached the window top) | **snap back** | 50 % 50, 90 % 149, ≤ 1 pt at 216 ms; ζ 1.0, response ≈ 217 ms |
+| fast (≈ 510 pt/s), **lift while moving** | 20 pt | ≈ 10 pt | **closes** | see "exit" below |
+| | 40 pt | 30 pt | **closes** | see "exit" below (`v-held-card-lift40-close-exit.jpg`) |
+| fast, **reverse**, lift | +150 / −10 | 136 → 129 | **closes** | the 10 pt reversal was too short to flip the release velocity |
+| | +130 / −30 | 118 → 88 | **snap back** | rest ≈ 230 ms after release |
+| | +150 / −50 | 136 → 89 | **snap back** | rest ≈ 265 ms after release |
+
+Earlier slow continuous drags (§2.7): 100 pt at 100 pt/s snapped back, and 130, 170 and 250 pt at
+130–210 pt/s closed.
+
+- **Card close is also decided by velocity.** A card stopped dead never closes, even pulled
+  ≥ 136 pt. A card still moving up at release closes from only ~10 pt at ≈ 500 pt/s, or from 130 pt
+  at ≈ 130 pt/s. A downward reversal of ≥ 30 pt before lift always snaps back.
+- So the "100–130 pt" from §2.7 is the slow-speed boundary only, not a distance threshold.
+- **Unexplained exit.** After the two *short* fast flicks (20 and 40 pt), Arc closed the card **and
+  left the switcher**:
+  - the whole deck shrank into the tabs button;
+  - a full-window in-app page took its place: "Want links to open in Arc? / Make Arc your default
+    browser… / Set Arc as Default Browser" (`22-empty-state-after-short-flick.png`,
+    `v-held-card-lift20-close-exit.jpg`);
+  - reopening the switcher showed the deck intact, minus the closed card.
+
+  A long flick (200 pt) and the +150/−10 close stayed in the switcher. I didn't find the cause. Don't
+  copy it without checking it on a real iPhone. It isn't a system prompt, and its button wasn't tapped.
+
 ## 3. Behaviour summary
 
 - **Taps act on touch-up; feedback comes on touch-down.** Cards shrink ~0.5 % and bar buttons brighten.
@@ -332,8 +437,17 @@ edge-swipe gesture of its own here. Whether it has one on a tab with history was
   Once it starts it commits, and it settles on a ζ ≈ 0.9–1.0 spring in ≈ 190–250 ms. At the newest tab
   a swipe toward newer rubber-bands at ≈ 0.5 : 1 (§2.4).
 - **Swipe up from the bar** follows the finger and opens **search**, not the switcher (§2.5).
-- **Card close** follows the finger straight up. Release past 100–130 pt closes it (any speed), and
-  the gap closes on a ≈ 0.2 s critically damped spring (§2.7).
+- **Card close** follows the finger straight up. Whether it closes depends on the **release
+  velocity**:
+  - stopped dead, it never closes (even at ≥ 136 pt);
+  - moving up at ≈ 500 pt/s, it closes from ≈ 10 pt;
+  - moving up at ≈ 130 pt/s, it closes from 130 pt;
+  - pulled back down ≥ 30 pt before release, it snaps back.
+
+  The gap closes on a ≈ 0.2 s critically damped spring (§2.7, §2.10).
+- **Bar swipe commit** is decided by release velocity as well: stopped at 107 pt it snaps back,
+  moving at ≈ 500 pt/s it commits from 60 pt, and a reversal always snaps back. Snap-back is at rest
+  in 150–170 ms (§2.10).
 - **Page menu (^)** and **search (+)** are bottom sheets that grow out of the + capsule, with the same
   369 × 47.5 capsule header row and 16 pt insets. Both follow a downward swipe and close on a tap
   outside. Closing is much faster than opening: the menu opens in ≈ 315 ms (response 0.22 s) and
@@ -346,7 +460,9 @@ edge-swipe gesture of its own here. Whether it has one on a tab with history was
 
 | Item | Why |
 |---|---|
-| A bar-swipe release threshold (a tracked drag that snaps back) | Every drag that passed the speed gate committed, down to 48 pt of page offset. A drag that starts fast and then stops short would test it; AXe drags move at constant speed. |
+| ~~Bar-swipe release threshold~~ | Measured in §2.10 with variable-speed `draw` strokes |
+| The exact projection constant behind both release rules | Speeds were tested at ≈ 130–180 and ≈ 500 pt/s only. A sweep of release speed at a fixed distance (100, 200, 300 pt/s…) would pin it down. |
+| Why a short fast card flick also exits the switcher | Seen twice (§2.10). The cause wasn't isolated. |
 | Swipe up from the bar's very bottom, or from the tabs button corner | iPadOS takes those as a window resize (Caveats) |
 | Edge swipe on a tab **with** back history | Not tested; only the no-history case was asked |
 | Exact search-panel open curve | The field morphs out of the + capsule, so template tracking only locks on for the last ~40 pt; the earlier part is the whole-window difference, which includes the iPad keyboard |
@@ -376,3 +492,7 @@ session I switched Arc Search back **on** in Settings › Privacy & Security ›
 Nothing else in Settings was changed. The 8 test tabs were closed (they're now in Arc's Archive),
 leaving the farewell tab and one tab of the owner's that was already there, and Arc's window is back to
 full screen.
+
+In the third session I opened 16 Wikipedia test tabs and closed all of them (they're in the Archive
+too). The farewell and owner tabs were untouched, and Arc is back to full screen. No system prompt
+appeared.
