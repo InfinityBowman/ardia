@@ -12,7 +12,10 @@ struct DownloadedFile: Identifiable, Hashable {
   var id: URL { url }
   var name: String { url.lastPathComponent }
 
-  var symbol: String {
+  var symbol: String { Self.symbol(for: url) }
+  var isVideo: Bool { VideoSaving.isVideo(url) }
+
+  static func symbol(for url: URL) -> String {
     guard let type = UTType(filenameExtension: url.pathExtension) else { return "doc" }
     if type.conforms(to: .image) { return "photo" }
     if type.conforms(to: .movie) || type.conforms(to: .video) { return "film" }
@@ -20,6 +23,72 @@ struct DownloadedFile: Identifiable, Hashable {
     if type.conforms(to: .pdf) { return "doc.richtext" }
     if type.conforms(to: .archive) { return "doc.zipper" }
     return "doc"
+  }
+}
+
+enum DownloadThumbLayout {
+  static let size = CGSize(width: 52, height: 38)
+}
+
+enum DownloadStatusText {
+  static func percent(_ fraction: Double) -> String {
+    fraction.formatted(.percent.precision(.fractionLength(0)))
+  }
+
+  static func bytes(_ value: Int64) -> String {
+    value.formatted(.byteCount(style: .file))
+  }
+
+  static func remaining(_ seconds: Double) -> String {
+    let rounded = max(Int(seconds.rounded()), 1)
+    if rounded < 60 { return String(localized: "\(rounded) s left") }
+    let minutes = Int((Double(rounded) / 60).rounded())
+    if minutes < 60 { return String(localized: "\(minutes) min left") }
+    return String(localized: "\(minutes / 60) h \(minutes % 60) min left")
+  }
+
+  static func stage(_ transfer: DownloadTransfer) -> String? {
+    switch transfer.stage {
+    case .preparing: String(localized: "Finding the best quality…")
+    case .assembling: String(localized: "Putting the video together…")
+    case .downloading: nil
+    }
+  }
+
+  static func amount(_ transfer: DownloadTransfer) -> String {
+    let received = bytes(transfer.receivedBytes)
+    if let expected = transfer.expectedBytes, expected > 0 {
+      return String(localized: "\(received) of \(bytes(expected))")
+    }
+    return received
+  }
+
+  static func menu(_ transfer: DownloadTransfer) -> String {
+    if let stage = stage(transfer) { return stage }
+    var parts: [String] = []
+    if let fraction = transfer.fraction { parts.append(percent(fraction)) }
+    if transfer.receivedBytes > 0 { parts.append(amount(transfer)) }
+    if let left = transfer.secondsRemaining { parts.append(remaining(left)) }
+    return parts.isEmpty ? String(localized: "Starting…") : parts.joined(separator: " · ")
+  }
+
+  static func list(_ transfer: DownloadTransfer, includesSpeed: Bool) -> String {
+    if let stage = stage(transfer) { return stage }
+    var parts = [amount(transfer)]
+    if transfer.expectedBytes == nil, let fraction = transfer.fraction { parts.insert(percent(fraction), at: 0) }
+    if includesSpeed, let speed = transfer.bytesPerSecond, speed > 0 { parts.append(String(localized: "\(bytes(Int64(speed)))/s")) }
+    if let left = transfer.secondsRemaining { parts.append(remaining(left)) }
+    return parts.joined(separator: " · ")
+  }
+
+  static func summaryTitle(_ summary: DownloadSummary) -> String {
+    let count = String(localized: "\(summary.count) downloads")
+    return summary.fraction.map { "\(count) · \(percent($0))" } ?? count
+  }
+
+  static func summaryBytes(_ summary: DownloadSummary) -> String {
+    let received = bytes(summary.receivedBytes)
+    return summary.expectedBytes.map { String(localized: "\(received) of \(bytes($0))") } ?? received
   }
 }
 
@@ -70,12 +139,9 @@ struct DownloadsList: View {
               .libraryRowChrome()
           }
           ForEach(model.files) { file in
-            Button {
+            DownloadRow(file: file) {
               previewing = file.url
-            } label: {
-              DownloadRow(file: file)
             }
-            .buttonStyle(.plain)
             .libraryRowChrome()
             .swipeActions {
               Button("Delete", role: .destructive) {
@@ -85,11 +151,7 @@ struct DownloadsList: View {
                 .tint(Palette.formAccent)
             }
             .contextMenu {
-              if VideoSaving.isVideo(file.url) {
-                VideoFileActions(file: file.url)
-              } else {
-                ShareLink(item: file.url)
-              }
+              DownloadFileActions(file: file.url)
               Button("Delete", systemImage: "trash", role: .destructive) { model.delete(file) }
             }
           }
@@ -97,10 +159,26 @@ struct DownloadsList: View {
       }
     }
     .quickLookPreview($previewing, in: model.files.map(\.url))
-    .task { model.reload(from: app.web.downloads.directory) }
+    .task {
+      app.downloadActivity.clearRecent()
+      model.reload(from: app.web.downloads.directory)
+    }
     .refreshable { model.reload(from: app.web.downloads.directory) }
     .onChange(of: app.web.downloads.finishedCount) { _, _ in
       withAnimation(Motion.snappy) { model.reload(from: app.web.downloads.directory) }
+      app.downloadActivity.clearRecent()
+    }
+  }
+}
+
+struct DownloadFileActions: View {
+  let file: URL
+
+  var body: some View {
+    if VideoSaving.isVideo(file) {
+      VideoFileActions(file: file)
+    } else {
+      ShareLink(item: file) { Label("Share…", systemImage: "square.and.arrow.up") }
     }
   }
 }
@@ -112,10 +190,30 @@ struct VideoFileActions: View {
 
   var body: some View {
     if VideoSaving.canSaveToPhotos(file) {
-      Button("Save to Photos", systemImage: "photo.on.rectangle.angled") { app.saveVideoToPhotos(file) }
+      Button("Save to Photos", systemImage: "photo.badge.plus") { app.saveVideoToPhotos(file) }
     }
     Button("Save to Files", systemImage: "folder") { VideoSaving.saveToFiles(file) }
     ShareLink(item: file) { Label("Share…", systemImage: "square.and.arrow.up") }
+  }
+}
+
+private struct DownloadRowIconButton: View {
+  let symbol: String
+  let label: LocalizedStringKey
+  var tint: Color = Palette.formAccent
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      Image(systemName: symbol)
+        .font(.title2)
+        .symbolRenderingMode(.hierarchical)
+        .foregroundStyle(tint)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(label)
   }
 }
 
@@ -131,11 +229,16 @@ private struct TransferRow: View {
 
   var body: some View {
     HStack(alignment: .center, spacing: Spacing.small) {
-      Image(systemName: failure == nil ? (transfer.isVideo ? "film" : "arrow.down.circle") : "exclamationmark.triangle.fill")
-        .font(.system(size: SiteRow.libraryFavicon * 0.8))
-        .foregroundStyle(failure == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
-        .frame(width: SiteRow.libraryFavicon, height: SiteRow.libraryFavicon)
-        .accessibilityHidden(true)
+      if failure == nil {
+        DownloadThumbnail(url: nil, art: app.downloadActivity.art[transfer.id], symbol: transfer.isVideo ? "film" : "doc", size: DownloadThumbLayout.size)
+      } else {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .font(.title3)
+          .foregroundStyle(Color.orange)
+          .frame(width: DownloadThumbLayout.size.width, height: DownloadThumbLayout.size.height)
+          .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 6, style: .continuous))
+          .accessibilityHidden(true)
+      }
       VStack(alignment: .leading, spacing: 4) {
         Text(verbatim: transfer.fileName)
           .lineLimit(1)
@@ -147,115 +250,102 @@ private struct TransferRow: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
         } else {
-          if let fraction = transfer.fraction, transfer.stage != .preparing {
-            ProgressView(value: fraction)
-              .tint(Palette.formAccent)
-          } else {
-            ProgressView(value: 0)
-              .tint(Palette.formAccent)
-              .opacity(0.5)
+          ProgressView(value: transfer.stage == .preparing ? 0 : (transfer.fraction ?? 0))
+            .tint(Palette.formAccent)
+            .opacity(transfer.fraction == nil || transfer.stage == .preparing ? 0.5 : 1)
+          ViewThatFits(in: .horizontal) {
+            statusText(includesSpeed: true)
+            statusText(includesSpeed: false)
           }
-          Text(status)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .monospacedDigit()
-            .lineLimit(1)
-            .contentTransition(.numericText())
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       if failure == nil {
-        Button {
+        DownloadRowIconButton(symbol: "xmark.circle.fill", label: "Cancel Download", tint: .secondary) {
           app.web.downloads.cancel(transfer)
-        } label: {
-          Image(systemName: "xmark.circle.fill")
-            .font(.title2)
-            .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(.secondary)
-            .frame(minWidth: 44, minHeight: 44)
-            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Cancel Download")
       } else {
         HStack(spacing: 0) {
           if transfer.canRetry {
-            Button {
+            DownloadRowIconButton(symbol: "arrow.clockwise.circle.fill", label: "Try Again") {
               app.web.downloads.retry(transfer)
-            } label: {
-              Image(systemName: "arrow.clockwise.circle.fill")
-                .font(.title2)
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(Palette.formAccent)
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(.rect)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Try Again")
           }
-          Button {
+          DownloadRowIconButton(symbol: "xmark.circle.fill", label: "Remove", tint: .secondary) {
             withAnimation(Motion.snappy) { app.web.downloads.dismiss(transfer) }
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .font(.title2)
-              .symbolRenderingMode(.hierarchical)
-              .foregroundStyle(.secondary)
-              .frame(minWidth: 44, minHeight: 44)
-              .contentShape(.rect)
           }
-          .buttonStyle(.plain)
-          .accessibilityLabel("Remove")
         }
       }
     }
     .padding(.vertical, Spacing.small)
     .accessibilityElement(children: .contain)
-    .accessibilityValue(failure ?? status)
+    .accessibilityValue(failure ?? DownloadStatusText.list(transfer, includesSpeed: true))
   }
 
-  private var status: String {
-    let received = transfer.receivedBytes.formatted(.byteCount(style: .file))
-    switch transfer.stage {
-    case .preparing:
-      return String(localized: "Finding the best quality…")
-    case .assembling:
-      return String(localized: "Putting the video together…")
-    case .downloading:
-      if let expected = transfer.expectedBytes, expected > 0 {
-        return String(localized: "\(received) of \(expected.formatted(.byteCount(style: .file)))")
-      }
-      if let fraction = transfer.fraction {
-        return transfer.receivedBytes > 0 ? "\(fraction.formatted(.percent.precision(.fractionLength(0)))) · \(received)" : fraction.formatted(.percent.precision(.fractionLength(0)))
-      }
-      return received
-    }
+  private func statusText(includesSpeed: Bool) -> some View {
+    Text(DownloadStatusText.list(transfer, includesSpeed: includesSpeed))
+      .font(.subheadline)
+      .foregroundStyle(.secondary)
+      .monospacedDigit()
+      .lineLimit(1)
+      .contentTransition(.numericText())
   }
 }
 
 private struct DownloadRow: View {
   var file: DownloadedFile
+  var onOpen: () -> Void
+
+  @Environment(AppModel.self) private var app
 
   var body: some View {
-    HStack(alignment: .top, spacing: Spacing.small) {
-      Image(systemName: file.symbol)
-        .font(.system(size: SiteRow.libraryFavicon * 0.8))
-        .foregroundStyle(.secondary)
-        .frame(width: SiteRow.libraryFavicon, height: SiteRow.libraryFavicon)
-        .padding(.top, 2)
-        .accessibilityHidden(true)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(verbatim: file.name)
-          .lineLimit(1)
-          .truncationMode(.middle)
-          .foregroundStyle(.primary)
-        Text(verbatim: "\(file.size.formatted(.byteCount(style: .file))) · \(file.modified.formatted(date: .abbreviated, time: .shortened))")
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
+    HStack(alignment: .center, spacing: Spacing.small) {
+      Button(action: onOpen) {
+        HStack(alignment: .center, spacing: Spacing.small) {
+          DownloadThumbnail(url: file.url, symbol: file.symbol, size: DownloadThumbLayout.size)
+          VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: file.name)
+              .lineLimit(1)
+              .truncationMode(.middle)
+              .foregroundStyle(.primary)
+            Text(verbatim: "\(file.size.formatted(.byteCount(style: .file))) · \(file.modified.formatted(date: .abbreviated, time: .shortened))")
+              .font(.subheadline)
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, Spacing.small)
+        .contentShape(.rect)
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .buttonStyle(.plain)
+      if file.isVideo {
+        if VideoSaving.canSaveToPhotos(file.url) {
+          DownloadRowIconButton(symbol: "photo.badge.plus", label: "Save to Photos") { app.saveVideoToPhotos(file.url) }
+        }
+        Menu {
+          VideoFileActions(file: file.url)
+        } label: {
+          Image(systemName: "ellipsis.circle")
+            .font(.title2)
+            .foregroundStyle(Palette.formAccent)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityLabel("More Actions")
+      } else {
+        ShareLink(item: file.url) {
+          Image(systemName: "square.and.arrow.up")
+            .font(.title3)
+            .foregroundStyle(Palette.formAccent)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Share")
+      }
     }
-    .padding(.vertical, Spacing.small)
-    .contentShape(.rect)
   }
 }

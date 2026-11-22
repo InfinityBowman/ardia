@@ -20,18 +20,59 @@ extension AppModel {
 
   func announceDownload(_ outcome: DownloadOutcome) {
     switch outcome {
-    case .finished(let file, _) where VideoSaving.isVideo(file):
-      toasts.show(.downloaded(file.lastPathComponent) { [weak self] in self?.browse.finishedVideo = file })
-    case .finished(let file, _):
-      toasts.show(.downloaded(file.lastPathComponent) { [weak self] in self?.web.shareRequest = file })
+    case .finished(let file, let transfer):
+      HarnessProbe.mark("download.finished")
+      downloadActivity.finished(file, art: downloadActivity.art[transfer])
+      downloadActivity.forget(transfer)
+      if !web.downloads.hasRunningTransfers { downloadRing.finishedLast() }
+      announce(downloadedToast(file))
     case .failed(let fileName):
-      toasts.show(.downloadFailed(fileName))
+      HarnessProbe.mark("download.failed")
+      downloadKeeper.noteFailure()
+      announce(.downloadFailed(fileName))
     case .videoFailed(let fileName, let message):
-      toasts.show(Toast(String(localized: "Couldn’t Download \(fileName)"), symbol: "exclamationmark.triangle.fill", duration: .seconds(3.2)) { [weak self] in
-        self?.sheet = .downloads
+      HarnessProbe.mark("download.failed")
+      downloadKeeper.noteFailure()
+      announce(Toast(String(localized: "Couldn’t Download Video"), detail: fileName, symbol: "exclamationmark.triangle.fill", duration: .seconds(4), actions: [
+        ToastAction(title: String(localized: "Details"), symbol: "list.bullet", isProminent: true) { [weak self] in self?.showDownloads() },
+      ]) { [weak self] in
+        self?.showDownloads()
       })
       AccessibilityNotification.Announcement(message).post()
     }
+  }
+
+  private func announce(_ toast: Toast) {
+    if UIApplication.shared.applicationState == .active {
+      toasts.show(toast)
+    } else {
+      downloadActivity.deferToast(toast)
+    }
+  }
+
+  func downloadedToast(_ file: URL) -> Toast {
+    let share = ToastAction(title: String(localized: "Share"), symbol: "square.and.arrow.up") { VideoSaving.share(file) }
+    if VideoSaving.canSaveToPhotos(file) {
+      let save = ToastAction(title: String(localized: "Save to Photos"), symbol: "photo.badge.plus", isProminent: true) { [weak self] in
+        self?.saveVideoToPhotos(file)
+      }
+      return .downloaded(file.lastPathComponent, actions: [save, share]) { [weak self] in self?.showDownloads() }
+    }
+    let open = ToastAction(title: String(localized: "Open"), symbol: "doc.text.magnifyingglass", isProminent: true) { [weak self] in
+      self?.openDownloadedFile(file)
+    }
+    return .downloaded(file.lastPathComponent, actions: [open, share]) { [weak self] in self?.openDownloadedFile(file) }
+  }
+
+  func openDownloadedFile(_ file: URL) {
+    downloadActivity.dismiss(file)
+    VideoSaving.open(file)
+  }
+
+  func showDownloads() {
+    browse.isToolbarPresented = false
+    downloadActivity.clearRecent()
+    sheet = .downloads
   }
 
   func shareCurrentPage() {

@@ -1,4 +1,5 @@
 import Photos
+import QuickLook
 import UIKit
 import UniformTypeIdentifiers
 
@@ -15,7 +16,8 @@ enum VideoSaving {
   }
 
   static func canSaveToPhotos(_ url: URL) -> Bool {
-    isVideo(url) && UIVideoAtPathIsCompatibleWithSavedPhotosAlbum(url.path(percentEncoded: false))
+    guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
+    return [UTType.mpeg4Movie, .quickTimeMovie, UTType("com.apple.m4v-video")].contains { $0.map(type.conforms(to:)) ?? false }
   }
 
   nonisolated static func saveToPhotos(_ url: URL) async -> PhotosResult {
@@ -42,12 +44,49 @@ enum VideoSaving {
   }
 
   @MainActor
+  static func share(_ url: URL) {
+    guard let presenter = topViewController() else { return }
+    let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    if let popover = sheet.popoverPresentationController {
+      popover.sourceView = presenter.view
+      popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.maxY - 80, width: 1, height: 1)
+      popover.permittedArrowDirections = []
+    }
+    presenter.present(sheet, animated: true)
+  }
+
+  @MainActor
+  static func open(_ url: URL) {
+    guard let presenter = topViewController() else { return }
+    let preview = QLPreviewController()
+    let source = FilePreviewSource(url: url)
+    FilePreviewSource.presented = source
+    preview.dataSource = source
+    presenter.present(preview, animated: true)
+  }
+
+  @MainActor
   static func topViewController() -> UIViewController? {
     let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
     let window = scenes.flatMap(\.windows).first { $0.isKeyWindow } ?? scenes.first?.windows.first
     var top = window?.rootViewController
     while let presented = top?.presentedViewController, !presented.isBeingDismissed { top = presented }
     return top
+  }
+}
+
+final class FilePreviewSource: NSObject, QLPreviewControllerDataSource {
+  static var presented: FilePreviewSource?
+  let url: URL
+
+  init(url: URL) {
+    self.url = url
+  }
+
+  func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
+
+  func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> any QLPreviewItem {
+    url as NSURL
   }
 }
 
@@ -58,6 +97,7 @@ extension AppModel {
       guard let self else { return }
       switch result {
       case .saved:
+        downloadActivity.markSaved(url)
         toasts.show(Toast(String(localized: "Saved to Photos"), symbol: "photo.on.rectangle.angled"))
       case .denied:
         toasts.show(Toast(String(localized: "Allow Ardia to Add to Photos in Settings"), symbol: "exclamationmark.triangle.fill", duration: .seconds(3.2)) {

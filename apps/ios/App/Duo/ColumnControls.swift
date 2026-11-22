@@ -59,12 +59,19 @@ struct BarSiteButton: View {
 struct BarRoundMenuButton: View {
   let action: () -> Void
 
+  @Environment(AppModel.self) private var app
+
   var body: some View {
     Button(action: action) {
       Image(systemName: "ellipsis")
         .font(.system(size: BrowseLayout.barMenuGlyph, weight: .semibold))
         .foregroundStyle(BrowsePalette.foregroundPrimary)
         .frame(width: DuoLayout.columnButton, height: DuoLayout.columnButton)
+        .overlay {
+          DownloadRingOverlay(center: app.downloadRing, diameter: DuoLayout.columnButton - DownloadRingView.lineWidth * 2 - DownloadRingView.gap * 2)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
         .contentShape(.circle)
     }
     .buttonStyle(BarButtonStyle())

@@ -42,6 +42,8 @@ final class AppModel {
   let deck: TabDeckModel
   let defaultBrowser: DefaultBrowserStatus
   let downloadKeeper = DownloadKeeper()
+  let downloadActivity = DownloadActivity()
+  @ObservationIgnored let downloadRing = DownloadRingCenter()
 
   var surface: Surface = .search
   var sheet: Sheet?

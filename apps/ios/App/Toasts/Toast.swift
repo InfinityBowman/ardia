@@ -77,8 +77,15 @@ extension Toast {
     Toast(String(localized: "Sent to \(deviceName)"), symbol: "paperplane.fill")
   }
 
-  static func downloaded(_ fileName: String, onOpen: @escaping @MainActor () -> Void) -> Toast {
-    Toast(String(localized: "Downloaded \(fileName)"), symbol: "arrow.down.circle.fill", duration: .seconds(3.2), onTap: onOpen)
+  static func downloaded(_ fileName: String, actions: [ToastAction], onOpen: @escaping @MainActor () -> Void) -> Toast {
+    Toast(
+      String(localized: "Downloaded"),
+      detail: fileName,
+      symbol: "checkmark.circle.fill",
+      duration: .seconds(5),
+      actions: actions,
+      onTap: onOpen
+    )
   }
 
   static func downloadFailed(_ fileName: String) -> Toast {

@@ -29,7 +29,6 @@ final class BrowseSession {
   var tones: [UUID: PageTone] = [:]
   var videoChoices: VideoChoices?
   var videoNotice: VideoNotice?
-  var finishedVideo: URL?
 
   struct StepRequest: Equatable {
     let id = UUID()

@@ -58,9 +58,6 @@ struct RootView: View {
     } message: { notice in
       Text(notice.message)
     }
-    .confirmationDialog(browse.finishedVideo?.lastPathComponent ?? "", isPresented: Binding(get: { browse.finishedVideo != nil }, set: { if !$0 { browse.finishedVideo = nil } }), titleVisibility: .visible, presenting: browse.finishedVideo) { file in
-      VideoFileActions(file: file)
-    }
     .fullScreenCover(isPresented: $browse.isVoicePresented) {
       VoiceSearchView()
     }

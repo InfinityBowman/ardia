@@ -36,6 +36,7 @@ struct ToolbarSheet: View {
           actionButtons
         }
         VStack(spacing: PageMenuLayout.groupSpacing) {
+          PageMenuDownloads { close(then: .sheet(.downloads)) }
           PageMenuGroup {
             PageMenuDisclosureRow(title: "Display Options", icon: "doc.text.image", isExpanded: $showsDisplay)
             if showsDisplay, let page {
@@ -46,7 +47,10 @@ struct ToolbarSheet: View {
             }
           }
           PageMenuGroup {
-            PageMenuRow("Download Video", icon: "square.and.arrow.down", enabled: isWebPage && page?.isLive == true) { close(then: .downloadVideo) }
+            PageMenuRow("Download Video", icon: "square.and.arrow.down", enabled: isWebPage && page?.isLive == true) {
+              app.downloadRing.expectDownload()
+              close(then: .downloadVideo)
+            }
             PageMenuRow("Site Settings", icon: "gearshape") { close(then: .siteSettings) }
           }
           if let page {
@@ -97,6 +101,7 @@ struct ToolbarSheet: View {
     .presentationDragIndicator(.hidden)
     .sensoryFeedback(.success, trigger: copies)
     .onDisappear {
+      app.downloadActivity.menuClosed()
       guard let followUp else { return }
       self.followUp = nil
       app.perform(followUp, on: tabID)

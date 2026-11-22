@@ -127,8 +127,14 @@ struct BarPageMenuButton: View {
   let address: BarAddress
   let action: () -> Void
 
+  @Environment(AppModel.self) private var app
+  @State private var holds = 0
+
   var body: some View {
-    Button(action: action) {
+    Button {
+      guard !app.downloadRing.takeHold() else { return }
+      action()
+    } label: {
       Image(systemName: "chevron.up")
         .font(.system(size: BrowseLayout.barChevronGlyph, weight: .semibold))
         .foregroundStyle(BrowsePalette.barGlyph)
@@ -137,11 +143,29 @@ struct BarPageMenuButton: View {
         .overlay { Circle().strokeBorder(BrowsePalette.barControlEdge, lineWidth: 0.5) }
         .frame(width: BrowseLayout.hitTarget, height: BrowseLayout.barControl)
         .contentShape(.rect)
+        .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+          guard app.downloadRing.held() else { return }
+          holds += 1
+          app.showDownloads()
+        })
     }
     .buttonStyle(BarPressStyle())
+    .sensoryFeedback(.impact(weight: .medium), trigger: holds)
     .accessibilityLabel("Page Menu")
-    .accessibilityValue(address.isInsecure ? Text("\(address.host), Not Secure") : Text(address.host))
-    .accessibilityHint("Shows this page’s address and actions.")
+    .accessibilityValue(accessibilityValue)
+    .accessibilityHint(app.isDownloading ? "Shows this page’s address, actions and downloads. Touch and hold for Downloads." : "Shows this page’s address and actions.")
+    .accessibilityAction(named: "Show Downloads") { app.showDownloads() }
+    .overlay {
+      DownloadRingOverlay(center: app.downloadRing)
+        .frame(width: BrowseLayout.hitTarget, height: BrowseLayout.hitTarget)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+  }
+
+  private var accessibilityValue: Text {
+    let place = address.isInsecure ? Text("\(address.host), Not Secure") : Text(address.host)
+    return app.isDownloading ? Text("\(place), Downloading") : place
   }
 }
 
