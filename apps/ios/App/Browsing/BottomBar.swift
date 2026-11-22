@@ -132,7 +132,8 @@ struct TabThumbnail: View {
         image = nil
         return
       }
-      image = await app.web.snapshots.image(named: name)
+      image = app.web.snapshots.cachedImage(named: name)
+      if image == nil { image = await app.web.snapshots.image(named: name) }
     }
   }
 

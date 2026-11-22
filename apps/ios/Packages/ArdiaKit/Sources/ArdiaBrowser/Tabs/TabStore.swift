@@ -55,6 +55,8 @@ public final class TabStore: LocalBrowsingSource {
   }
   public var searchTemplate = "https://www.google.com/search?q=%s"
   public var onLocalChange: (@MainActor () -> Void)?
+  @ObservationIgnored private var deferredSave: Task<Void, Never>?
+  @ObservationIgnored private var hasDeferredSave = false
   public var onTabsRemoved: (@MainActor ([BrowserTab]) -> Void)?
   public var onTabsArchived: (@MainActor ([UUID]) -> Void)?
   public var onPrivateTabsClosed: (@MainActor (_ ids: [UUID], _ noneLeft: Bool) -> Void)?
@@ -171,7 +173,20 @@ public final class TabStore: LocalBrowsingSource {
     selectedTabID = id
     if let tab = selectedTab {
       tab.lastActive = date
-      if !tab.isPrivate { persist(changedTabs: true) }
+      if !tab.isPrivate { persistSoon() }
+    }
+  }
+
+  /// Selecting runs on the frame that hands the tab switcher back to the page. A synchronous
+  /// SwiftData save there froze every switch for ~80ms, so selection saves are batched and run
+  /// shortly after; any other save, or the app resigning active, flushes them first.
+  private func persistSoon() {
+    hasDeferredSave = true
+    deferredSave?.cancel()
+    deferredSave = Task { [weak self] in
+      try? await Task.sleep(for: .milliseconds(600))
+      guard !Task.isCancelled else { return }
+      self?.persist(changedTabs: false)
     }
   }
 
@@ -624,7 +639,11 @@ public final class TabStore: LocalBrowsingSource {
   }
 
   private func persist(changedTabs: Bool) {
+    deferredSave?.cancel()
+    deferredSave = nil
+    let changed = changedTabs || hasDeferredSave
+    hasDeferredSave = false
     try? context.save()
-    if changedTabs { onLocalChange?() }
+    if changed { onLocalChange?() }
   }
 }

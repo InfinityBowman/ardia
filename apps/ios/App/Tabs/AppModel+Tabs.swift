@@ -30,8 +30,24 @@ extension AppModel {
     }
   }
 
-  func showTabSwitcher() {
-    captureHandoff()
+  func showTabSwitcher(handoff image: UIImage? = nil) {
+    // The phone's deck stage snapshots the live page itself, for free; only the wide layouts'
+    // SwiftUI deck still needs a drawn hand-off image.
+    if usesDeckStage {
+      if let deckStage, deckStage.turnBackIfLanding() { return }
+      // Observation notifies on every assignment, equal or not; only write what changes.
+      if deck.handoff != nil { deck.handoff = nil }
+      let entrance: TabDeckModel.Entrance = surface == .browsing ? tabs.selectedTabID.map { .fromPage($0) } ?? .plain : .plain
+      if deck.entrance != entrance { deck.entrance = entrance }
+      if let deckStage, surface != .tabSwitcher {
+        deckStage.presentFromTap()
+        DispatchQueue.main.async { [weak self] in self?.surface = .tabSwitcher }
+      } else {
+        surface = .tabSwitcher
+      }
+      return
+    }
+    captureHandoff(using: image)
     if let id = tabs.selectedTabID, deck.handoff?.tabID == id {
       deck.entrance = .fromPage(id)
     } else {
@@ -40,10 +56,13 @@ extension AppModel {
     surface = .tabSwitcher
   }
 
-  func captureHandoff() {
+  func captureHandoff(using captured: UIImage? = nil) {
     deck.handoff = nil
     guard let id = tabs.selectedTabID, surface == .browsing else { return }
-    if let page = web.existingWebTab(id), let webView = page.webView, webView.window != nil, !webView.bounds.isEmpty {
+    if let captured {
+      deck.handoff = TabDeckModel.Handoff(tabID: id, image: captured)
+      persistSnapshot(captured, for: id)
+    } else if let page = web.existingWebTab(id), let webView = page.webView, webView.window != nil, !webView.bounds.isEmpty {
       let image = Self.render(webView, cropBottom: 0)
       deck.handoff = TabDeckModel.Handoff(tabID: id, image: image)
       persistSnapshot(image, for: id)
@@ -56,7 +75,7 @@ extension AppModel {
 
   static let browsingBarClearance: CGFloat = 52
 
-  private func persistSnapshot(_ image: UIImage, for id: UUID) {
+  func persistSnapshot(_ image: UIImage, for id: UUID) {
     guard let cgImage = image.cgImage else { return }
     if tabs.isPrivate(id) {
       tabs.update(id, snapshotFileName: web.snapshots.keepInMemory(cgImage, for: id))
@@ -75,6 +94,10 @@ extension AppModel {
     let rect = CGRect(x: 0, y: 0, width: bounds.width, height: max(bounds.height - cropBottom, 1))
     let format = UIGraphicsImageRendererFormat.preferred()
     format.opaque = true
+    // `.preferred()` picks 16-bit float on XDR screens, which doubles the bytes and takes a slow blit path.
+    format.preferredRange = .standard
+    // 3x is 2.25x the pixels of 2x and the draw time scales with pixels; 2x is sharp on a moving card.
+    format.scale = min(format.scale, 2)
     return UIGraphicsImageRenderer(bounds: rect, format: format).image { _ in
       _ = view.drawHierarchy(in: bounds, afterScreenUpdates: false)
     }
@@ -109,6 +132,7 @@ extension AppModel {
   }
 
   func openTab(_ id: UUID) {
+    HarnessProbe.mark("openTab")
     showSpace(of: id)
     isIncognito = tabs.isPrivate(id)
     tabs.select(id)

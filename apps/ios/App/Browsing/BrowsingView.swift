@@ -186,7 +186,10 @@ struct BrowsingView: View {
   }
 
   private func cover(for tab: BrowserTab) -> UIImage? {
-    app.browse.covers.image(for: tab.id) ?? app.deck.memoryImage(for: tab.id) ?? (storedCover?.id == tab.id ? storedCover?.image : nil)
+    if let image = app.browse.covers.image(for: tab.id) ?? app.deck.memoryImage(for: tab.id) { return image }
+    if storedCover?.id == tab.id, let image = storedCover?.image { return image }
+    // A thumbnail already decoded in memory beats a title card while the stored cover loads.
+    return tab.snapshotFileName.flatMap(app.web.snapshots.cachedImage(named:)).map { UIImage(cgImage: $0) }
   }
 
   private func loadStoredCover(for tab: BrowserTab) async {
@@ -196,32 +199,23 @@ struct BrowsingView: View {
   }
 
   private func openDeck() {
+    HarnessProbe.mark("tabs.tap")
     app.browse.thawOrder()
-    saveCurrentSnapshot()
-    app.showTabSwitcher()
-  }
-
-  private func saveCurrentSnapshot() {
-    rememberCurrentCover()
-    guard let id = app.tabs.selectedTabID, let image = app.browse.covers.image(for: id), let cgImage = image.cgImage else { return }
-    let snapshots = app.web.snapshots
-    let tabs = app.tabs
-    if tabs.isPrivate(id) {
-      tabs.update(id, snapshotFileName: snapshots.keepInMemory(cgImage, for: id))
-      return
-    }
-    let scale = image.scale
-    Task {
-      if let name = await snapshots.save(cgImage, scale: scale, for: id) {
-        tabs.update(id, snapshotFileName: name)
-      }
+    // One capture serves the page cover, the deck's zoom-out handoff and the saved thumbnail.
+    // It used to be drawn twice on the main thread (and written to disk twice) on every tap.
+    if app.usesDeckStage {
+      app.showTabSwitcher()
+    } else {
+      app.showTabSwitcher(handoff: rememberCurrentCover())
     }
   }
 
-  private func rememberCurrentCover() {
+  @discardableResult
+  private func rememberCurrentCover() -> UIImage? {
     guard let id = app.tabs.selectedTabID, let page = app.web.existingWebTab(id), !page.isLoading, page.failure == nil,
-          let webView = page.webView, let image = PageCoverCache.capture(webView) else { return }
+          let webView = page.webView, let image = PageCoverCache.capture(webView) else { return nil }
     app.browse.covers.store(image, for: id)
+    return image
   }
 
   private var barActions: BarActions {
@@ -283,7 +277,9 @@ struct BrowsingView: View {
   }
 
   private var barPresentation: BottomBarVisibility.Presentation {
-    barVisibility.presentation(searchTrayPresented: app.browse.isSearchTrayOnScreen)
+    // The bar stays put while the search tray is up: the tray and keyboard cover it, and it is
+    // live the instant search closes instead of fading back in after the keyboard has gone.
+    barVisibility.presentation
   }
 
   private var isBarShown: Bool {

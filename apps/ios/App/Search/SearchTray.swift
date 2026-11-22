@@ -7,6 +7,7 @@ struct SearchTray<Drag: Gesture>: View {
   @Binding var isFocused: Bool
   let maxHeight: CGFloat
   let dismissDrag: Drag
+  let pull: TrayPull
 
   @Environment(AppModel.self) private var app
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -22,6 +23,8 @@ struct SearchTray<Drag: Gesture>: View {
   @State private var scrubReleases = 0
   @State private var isScrubbing = false
   @State private var scrubStart: CGPoint?
+  @State private var scrubStartTime = Date.distantPast
+  @State private var rowsDrag = RowsDrag.undecided
   @State private var headerHeight: CGFloat = 0
   @State private var naturalRowsHeight: CGFloat = 0
   @State private var isSubmitting = false
@@ -194,6 +197,7 @@ struct SearchTray<Drag: Gesture>: View {
           .clipped()
           .mask { fadeMask(overflows: overflows) }
           .gesture(scrub(rows))
+          .simultaneousGesture(rowsPull)
       }
     }
     .frame(height: rowsBudget, alignment: .top)
@@ -277,8 +281,12 @@ struct SearchTray<Drag: Gesture>: View {
       .onChanged { value in
         if scrubStart != value.startLocation {
           scrubStart = value.startLocation
+          scrubStartTime = .now
           isScrubbing = false
+          rowsDrag = .undecided
         }
+        decideRowsDrag(value.translation)
+        guard rowsDrag != .pull else { return }
         if abs(value.translation.height) > 6 || abs(value.translation.width) > 6 { isScrubbing = true }
         guard let hit = hitTest(value.location, rows: rows) else {
           highlightedID = nil
@@ -291,14 +299,40 @@ struct SearchTray<Drag: Gesture>: View {
       }
       .onEnded { value in
         let wasScrubbing = isScrubbing && scrubStart == value.startLocation
+        let wasPull = rowsDrag == .pull
         isScrubbing = false
         scrubStart = nil
+        rowsDrag = .undecided
         let hit = hitTest(value.location, rows: rows)
         withAnimation(Motion.press) { highlightedID = nil }
-        guard let hit, let suggestion = rows.first(where: { $0.id == hit }) else { return }
+        guard !wasPull, let hit, let suggestion = rows.first(where: { $0.id == hit }) else { return }
         if wasScrubbing { scrubReleases += 1 }
         activate(suggestion)
       }
+  }
+
+  /// A quick downward drag on the results pulls the tray closed, like a sheet. Scrubbing through
+  /// the rows starts with a press: hold, then slide.
+  private var rowsPull: some Gesture {
+    DragGesture(minimumDistance: 6, coordinateSpace: .global)
+      .onChanged { value in
+        decideRowsDrag(value.translation)
+        if rowsDrag == .pull { pull.changed(value.translation.height) }
+      }
+      .onEnded { value in
+        if rowsDrag == .pull { pull.ended(value.translation.height, value.velocity.height) }
+      }
+  }
+
+  private func decideRowsDrag(_ translation: CGSize) {
+    guard rowsDrag == .undecided, abs(translation.height) > 6 || abs(translation.width) > 6 else { return }
+    let quick = Date.now.timeIntervalSince(scrubStartTime) < RowsDrag.holdToScrub
+    if quick, translation.height > abs(translation.width) {
+      rowsDrag = .pull
+      withAnimation(Motion.press) { highlightedID = nil }
+    } else {
+      rowsDrag = .scrub
+    }
   }
 
   private func hitTest(_ point: CGPoint, rows: [SearchSuggestion]) -> String? {
@@ -348,4 +382,15 @@ struct SearchTray<Drag: Gesture>: View {
     isFocused = false
     app.browse.dismissSearch()
   }
+}
+
+/// Hands a drag that a surface has decided is a pull to the tray's dismiss handling.
+struct TrayPull {
+  let changed: (CGFloat) -> Void
+  let ended: (_ translation: CGFloat, _ velocity: CGFloat) -> Void
+}
+
+private enum RowsDrag {
+  case undecided, scrub, pull
+  static let holdToScrub: TimeInterval = 0.2
 }

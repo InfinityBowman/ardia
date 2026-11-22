@@ -5,6 +5,8 @@ struct SearchTrayHost: View {
   @Environment(AppModel.self) private var app
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.screenLayout) private var screenLayout
+  @Environment(\.profileLook) private var look
+  @Environment(\.usesGlass) private var usesGlass
   @ScaledMetric(relativeTo: .title3) private var fieldScale: CGFloat = 1
   @State private var shown: BrowseSession.SearchRequest?
   @State private var presentation = 0
@@ -37,19 +39,31 @@ struct SearchTrayHost: View {
       let restsWithoutKeyboard = hasLanded && !keyboardUp && !isClosing
       let liveLift = restsWithoutKeyboard ? max(keyboardHeight, safeBottom) : keyboardHeight
       let isUp = keyboardUp || (!isClosing && hasLanded)
-      let lift = heldLift ?? liveLift
+      // Size for where the keyboard is going (known from its notification), not where the safe
+      // area says it is yet, so the tray never changes height mid-rise.
+      let expected = !isClosing && keyboard.height > Self.keyboardThreshold ? keyboard.height : 0
+      let lift = heldLift ?? max(liveLift, expected)
       let command = screenLayout.isWide ? CommandBarPlacement(proxy: proxy, lift: lift) : nil
       let maxHeight = command?.maxHeight ?? maxHeight(in: proxy, lift: lift)
       let progress = TrayDrag.progress(offset: dragOffset, travel: trayHeight + lift)
       let restingDrop = isUp || reduceMotion || command != nil ? 0 : maxHeight + BrowseLayout.sheetTopRadius
       ZStack(alignment: .bottom) {
-        if let shown {
+        if command == nil {
+          // Phone: the tray rides the keyboard on Core Animation (see KeyboardRider).
+          KeyboardRider(
+            heldLift: heldLift,
+            isVisible: shown != nil && !isClosing,
+            isInteractive: shown != nil && !isClosing,
+            content: riderContent(maxHeight: maxHeight, progress: progress, liveLift: liveLift)
+          )
+          .ignoresSafeArea()
+        } else if let shown {
           dim(over: shown)
             .opacity(isUp ? 1 - progress : 0)
             .animation(reduceMotion ? Motion.surfaceFade : Motion.trayDim, value: isUp)
             .allowsHitTesting(isUp && !isClosing)
             .ignoresSafeArea()
-          SearchTray(request: shown, isFocused: $isFocused, maxHeight: maxHeight, dismissDrag: dismissDrag(lift: liveLift))
+          SearchTray(request: shown, isFocused: $isFocused, maxHeight: maxHeight, dismissDrag: dismissDrag(lift: liveLift), pull: pull(lift: liveLift))
             .id(presentation)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { trayHeight = $0 }
             .modifier(CommandBarFrame(placement: command, isUp: isUp))
@@ -81,6 +95,30 @@ struct SearchTrayHost: View {
         beginClosing()
       }
     }
+  }
+
+  /// The dim and the tray, laid out for the keyboard rider: the tray ends where the keyboard begins.
+  private func riderContent(maxHeight: CGFloat, progress: CGFloat, liveLift: CGFloat) -> some View {
+    KeyboardRiderLayout(
+      dim: Group {
+        if let shown {
+          dim(over: shown).opacity(1 - progress)
+        }
+      },
+      rider: Group {
+        if let shown {
+          SearchTray(request: shown, isFocused: $isFocused, maxHeight: maxHeight, dismissDrag: dismissDrag(lift: liveLift), pull: pull(lift: liveLift))
+            .id(presentation)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { trayHeight = $0 }
+            .offset(y: dragOffset)
+            .accessibilityAddTraits(.isModal)
+        }
+      }
+    )
+    .environment(app)
+    .environment(\.profileLook, look)
+    .environment(\.usesGlass, usesGlass)
+    .environment(\.screenLayout, screenLayout)
   }
 
   private var keyboardProbe: some View {
@@ -186,30 +224,41 @@ struct SearchTrayHost: View {
 
   private func dismissDrag(lift: CGFloat) -> some Gesture {
     DragGesture(minimumDistance: 6, coordinateSpace: .global)
-      .onChanged { value in
-        guard !isClosing else { return }
-        let translation = value.translation.height
-        if !isDragging {
-          isDragging = true
-          settleTask?.cancel()
-        }
-        if TrayDrag.releasesKeyboard(translation: translation), isFocused {
-          if heldLift == nil { heldLift = lift }
-          isFocused = false
-        }
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) { dragOffset = TrayDrag.offset(for: translation) }
-      }
-      .onEnded { value in
-        guard isDragging else { return }
-        isDragging = false
-        if TrayDrag.shouldDismiss(translation: value.translation.height, velocity: value.velocity.height, trayHeight: trayHeight) {
-          app.cancelSearch()
-        } else {
-          settle()
-        }
-      }
+      .onChanged { value in dragChanged(value.translation.height, lift: lift) }
+      .onEnded { value in dragEnded(value.translation.height, velocity: value.velocity.height) }
+  }
+
+  /// The same pull, for a surface (the results) that decides for itself when a drag is a pull.
+  private func pull(lift: CGFloat) -> TrayPull {
+    TrayPull(
+      changed: { dragChanged($0, lift: lift) },
+      ended: { dragEnded($0, velocity: $1) }
+    )
+  }
+
+  private func dragChanged(_ translation: CGFloat, lift: CGFloat) {
+    guard !isClosing else { return }
+    if !isDragging {
+      isDragging = true
+      settleTask?.cancel()
+    }
+    if TrayDrag.releasesKeyboard(translation: translation), isFocused {
+      if heldLift == nil { heldLift = lift }
+      isFocused = false
+    }
+    var transaction = Transaction()
+    transaction.disablesAnimations = true
+    withTransaction(transaction) { dragOffset = TrayDrag.offset(for: translation) }
+  }
+
+  private func dragEnded(_ translation: CGFloat, velocity: CGFloat) {
+    guard isDragging else { return }
+    isDragging = false
+    if TrayDrag.shouldDismiss(translation: translation, velocity: velocity, trayHeight: trayHeight) {
+      app.cancelSearch()
+    } else {
+      settle()
+    }
   }
 
   private func settle() {

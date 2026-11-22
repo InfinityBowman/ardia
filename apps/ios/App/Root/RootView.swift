@@ -26,14 +26,15 @@ struct RootView: View {
             .accessibilityHidden(app.surface == .tabSwitcher)
             .transition(CoveredTransition())
         }
-        if app.surface == .tabSwitcher, !screenLayout.isWide, screenLayout.fold == nil {
-          TabSwitcherView()
-            .transition(CoveredTransition())
-            .zIndex(1)
-        }
       }
       .animation(reduceMotion ? Motion.surfaceFade : Motion.surfaceSwap, value: isHome)
       .ignoresSafeArea(.keyboard, edges: browse.trayHoldsKeyboard ? .bottom : [])
+      if !screenLayout.isWide, screenLayout.fold == nil {
+        DeckStageHost(surface: app.surface)
+          .ignoresSafeArea()
+          .accessibilityHidden(app.surface != .tabSwitcher)
+          .zIndex(5)
+      }
       SearchTrayHost()
         .zIndex(10)
     }
@@ -63,6 +64,7 @@ struct RootView: View {
       default: break
       }
     }
+    .onChange(of: app.surface) { _, surface in HarnessProbe.mark("surface", "\(surface)") }
     .onChange(of: app.sync.snapshot.search) { _, _ in app.applySyncedSearch() }
     .onChange(of: app.sync.selectedProfileId) { _, _ in app.applySyncedSearch() }
     .onChange(of: app.sync.isEnabled) { _, _ in app.applySyncedSearch() }

@@ -32,6 +32,10 @@ final class PageCoverCache {
     defer { refresh?.isHidden = wasHidden }
     let format = UIGraphicsImageRendererFormat.preferred()
     format.opaque = true
+    // `.preferred()` picks 16-bit float on XDR screens, which doubles the bytes and takes a slow blit path.
+    format.preferredRange = .standard
+    // 3x is 2.25x the pixels of 2x and the draw time scales with pixels; 2x is sharp on a moving card.
+    format.scale = min(format.scale, 2)
     let bounds = webView.bounds
     let area = CGRect(x: 0, y: croppingTop, width: bounds.width, height: bounds.height - croppingTop)
     return UIGraphicsImageRenderer(bounds: area, format: format).image { _ in

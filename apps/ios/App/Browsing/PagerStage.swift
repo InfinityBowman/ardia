@@ -94,7 +94,7 @@ struct PagerSnapshot: View {
       look.surface
       if let memory = app.browse.covers.image(for: tab.id) ?? app.deck.memoryImage(for: tab.id) ?? preloaded {
         Image(uiImage: memory).resizable().scaledToFill()
-      } else if let image {
+      } else if let image = image ?? tab.snapshotFileName.flatMap(app.web.snapshots.cachedImage(named:)) {
         Image(decorative: image, scale: 1).resizable().scaledToFill()
       } else {
         PageLoadingPlaceholder(tab: tab, backdrop: look.surface)

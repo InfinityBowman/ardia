@@ -56,10 +56,15 @@ nonisolated struct DeckPose {
   var scale: CGFloat
   var corner: CGFloat
   var opacity: Double
+  /// Radians. Cards gathered into the tabs button sit tilted, like the stack drawn on the button.
+  var rotation: CGFloat = 0
   var headerOpacity: Double
   var visibleWidth: CGFloat
 
-  static func resolve(_ motion: DeckMotion, role: DeckRole, geometry: TabsDeckGeometry, isLast: Bool) -> DeckPose {
+  /// Width of a card gathered into the tabs button.
+  static let launcherWidth: CGFloat = 26
+
+  static func resolve(_ motion: DeckMotion, role: DeckRole, geometry: TabsDeckGeometry, isLast: Bool, tilt: CGFloat = 0) -> DeckPose {
     let deckCenter = geometry.center(at: motion.relative)
     let deckScale = geometry.scale(at: motion.relative)
     let scaleT = CGFloat(motion.scaleProgress)
@@ -68,6 +73,7 @@ nonisolated struct DeckPose {
     var scale = deckScale
     var corner = TabsLayout.cardRadius
     var opacity = 1.0
+    var rotation: CGFloat = 0
     switch role {
     case .stay:
       break
@@ -76,11 +82,14 @@ nonisolated struct DeckPose {
       center = lerp(geometry.expandedCenter, deckCenter, positionT)
       corner = lerp(TabsLayout.displayCornerRadius, TabsLayout.cardRadius, scaleT)
     case .launcher:
-      let start = 22 / max(geometry.cardSize.width, 1)
+      // Out of (or back into) the tabs button: a small tilted card there, a full card in the deck.
+      let start = launcherWidth / max(geometry.cardSize.width, 1)
       scale = lerp(start, deckScale, scaleT)
       center = lerp(geometry.tabButtonCenter, deckCenter, positionT)
-      corner = lerp(4, TabsLayout.cardRadius, scaleT)
-      opacity = min(1, motion.scaleProgress * 2.5)
+      corner = lerp(3, TabsLayout.cardRadius, scaleT)
+      rotation = tilt * (1 - positionT)
+      // Visible until the last stretch, where it merges into the button's own stack.
+      opacity = min(1, max(0, motion.scaleProgress) * 5)
     case .slideLeft:
       center.x -= (1 - positionT) * geometry.container.width * 0.7
     case .slideRight:
@@ -97,6 +106,7 @@ nonisolated struct DeckPose {
       scale: scale,
       corner: corner,
       opacity: opacity,
+      rotation: rotation,
       headerOpacity: min(1, settle) * min(1, liftFade) * Double(1 - vanish),
       visibleWidth: geometry.visibleWidth(at: motion.relative, isLast: isLast)
     )

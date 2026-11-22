@@ -18,7 +18,7 @@ public enum TabsPalette {
 }
 
 public enum TabsLayout {
-  public static let cardRadius: CGFloat = 13
+  public static let cardRadius: CGFloat = 16
   public static let displayCornerRadius: CGFloat = 55
   public static let faviconSize: CGFloat = 16
   public static let faviconRadius: CGFloat = 4

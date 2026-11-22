@@ -98,24 +98,6 @@ struct BottomBarVisibilityTests {
     #expect(visibility.presentation == .collapsed)
   }
 
-  @Test func `the bar is hidden while the search tray is on screen`() {
-    let visibility = BottomBarVisibility()
-    #expect(visibility.presentation(searchTrayPresented: false) == .expanded)
-    #expect(visibility.presentation(searchTrayPresented: true) == .hidden)
-  }
-
-  @Test func `the search tray leaving does not bring back a bar find still hides`() {
-    var visibility = BottomBarVisibility()
-    visibility.findSessionChanged(isActive: true)
-    #expect(visibility.presentation(searchTrayPresented: false) == .hidden)
-  }
-
-  @Test func `the search tray leaving keeps a collapsed bar collapsed`() {
-    var visibility = BottomBarVisibility()
-    visibility.scrollCollapsed = true
-    #expect(visibility.presentation(searchTrayPresented: false) == .collapsed)
-  }
-
   @Test func `a keyboard cycle with no find session never hides the bar`() {
     var visibility = BottomBarVisibility()
     visibility.keyboardWillShow()

@@ -22,10 +22,6 @@ public struct BottomBarVisibility: Equatable, Sendable {
     return scrollCollapsed ? .collapsed : .expanded
   }
 
-  public func presentation(searchTrayPresented: Bool) -> Presentation {
-    searchTrayPresented ? .hidden : presentation
-  }
-
   public var isShown: Bool {
     presentation != .hidden
   }

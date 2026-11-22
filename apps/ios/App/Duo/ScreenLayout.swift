@@ -237,7 +237,7 @@ final class VerticalBarProbeView: UIView {
 }
 
 enum DuoLog {
-  private static let logger = Logger(subsystem: "com.ardia.browser.ios", category: "duo")
+  private static let logger = Logger(subsystem: "com.jacobmaynard.ardia", category: "duo")
 
   static func space(_ space: ScreenSpace, _ layout: ScreenLayout) {
     #if DEBUG

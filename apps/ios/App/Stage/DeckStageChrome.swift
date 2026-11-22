@@ -1,0 +1,242 @@
+import ArdiaBrowser
+import ArdiaDesign
+import SwiftUI
+import UIKit
+
+/// State the SwiftUI chrome of the deck stage reads; the UIKit controller owns it.
+@MainActor
+@Observable
+final class DeckStageModel {
+  var geometry = TabsDeckGeometry(container: CGSize(width: 402, height: 874), safeTop: 62, safeBottom: 34)
+  var query = ""
+  var isEmpty = false
+  var isShowingArchiveCard = false
+  var isConfirmingCloseAll = false
+  var isConfirmingCloseIncognito = false
+  var keyboardOverlap: CGFloat = 0
+  var blurSearch = 0
+  /// Bumped each time the grid is shown, to scroll it to the selected tab.
+  var gridScroll = 0
+  /// Whether the deck is on screen; its SwiftUI hides itself from accessibility when not.
+  var isPresented = false
+
+  /// Writes only on change: Observation notifies on every assignment, equal or not.
+  func set<Value: Equatable>(_ key: ReferenceWritableKeyPath<DeckStageModel, Value>, _ value: Value) {
+    if self[keyPath: key] != value { self[keyPath: key] = value }
+  }
+
+  @ObservationIgnored var toggleGrid: () -> Void = {}
+  @ObservationIgnored var openFromGrid: (UUID) -> Void = { _ in }
+  @ObservationIgnored var closeFromGrid: (UUID) -> Void = { _ in }
+  @ObservationIgnored var dismissArchiveCard: () -> Void = {}
+  @ObservationIgnored var closeAll: () -> Void = {}
+}
+
+/// Environment the stage's hosted SwiftUI needs from RootView; hosted controllers don't inherit it.
+struct DeckStageEnvironment: Equatable {
+  var look: ProfileLook
+  var usesGlass: Bool
+  var screenLayout: ScreenLayout
+}
+
+extension View {
+  func deckStageEnvironment(_ app: AppModel, _ environment: DeckStageEnvironment) -> some View {
+    self
+      .environment(app)
+      .environment(\.profileLook, environment.look)
+      .environment(\.usesGlass, environment.usesGlass)
+      .environment(\.screenLayout, environment.screenLayout)
+  }
+}
+
+/// Header, archive card, empty state, grid and dialogs: everything above the cards except the bar.
+struct DeckStageTopChrome: View {
+  @Bindable var stage: DeckStageModel
+  @Environment(AppModel.self) private var app
+
+  var body: some View {
+    let geometry = stage.geometry
+    ZStack {
+      if stage.isEmpty {
+        DeckEmptyState(geometry: geometry, isSearching: !trimmedQuery.isEmpty, showsArchive: app.hasArchivedTabs) { app.openArchive() }
+          .transition(.opacity)
+      }
+      if stage.isShowingArchiveCard, !app.deck.isGrid {
+        ArchiveIntervalCard(interval: Bindable(app.tabs).autoArchiveInterval) { stage.dismissArchiveCard() }
+          .padding(.horizontal, geometry.safeSide + TabsLayout.headerSide)
+          .frame(width: geometry.container.width)
+          .position(x: geometry.container.width / 2, y: geometry.safeTop + TabsLayout.archiveCardCenter)
+      }
+      DeckHeader(
+        geometry: geometry,
+        privateCount: app.tabs.privateTabs.count,
+        hasTabs: !app.deckTabs.isEmpty,
+        closeIncognito: { stage.isConfirmingCloseIncognito = true },
+        closeAll: { stage.isConfirmingCloseAll = true }
+      )
+    }
+    .frame(width: geometry.container.width, height: geometry.container.height)
+    .accessibilityHidden(!stage.isPresented)
+    .confirmationDialog(closeAllTitle, isPresented: $stage.isConfirmingCloseAll, titleVisibility: .visible) {
+      Button(app.deckTabs.count == 1 ? String(localized: "Close Tab") : String(localized: "Close All Tabs"), role: .destructive) { stage.closeAll() }
+    } message: {
+      Text(app.tabs.privateTabs.isEmpty ? "They’ll stay in your Archive." : "Incognito tabs aren’t saved. Other tabs stay in your Archive.")
+    }
+    .confirmationDialog("Close Incognito Tabs?", isPresented: $stage.isConfirmingCloseIncognito, titleVisibility: .visible) {
+      Button("Close Incognito Tabs", role: .destructive) { app.leaveIncognito() }
+    } message: {
+      Text("Their pages, cookies and history are cleared.")
+    }
+  }
+
+  private var trimmedQuery: String { stage.query.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+  private var closeAllTitle: String {
+    app.deckTabs.count == 1 ? String(localized: "Close 1 Tab?") : String(localized: "Close \(app.deckTabs.count) Tabs?")
+  }
+}
+
+/// The grid, kept built for as long as the deck is mounted: switching between stack and grid is a
+/// crossfade of two finished layers, never a SwiftUI build.
+struct DeckStageGrid: View {
+  let stage: DeckStageModel
+  @Environment(AppModel.self) private var app
+
+  var body: some View {
+    let geometry = stage.geometry
+    TabGridView(
+      tabs: gridTabs,
+      selectedID: app.tabs.selectedTabID,
+      cardAspect: geometry.container.width / max(geometry.container.height, 1),
+      topInset: geometry.safeTop + TabsLayout.headerBottom + 8,
+      bottomInset: geometry.container.height - geometry.barCenterY + TabsLayout.barCircle,
+      sideInset: geometry.safeSide + TabsLayout.headerSide + 4,
+      memoryImage: { app.browse.covers.image(for: $0) },
+      snapshots: app.web.snapshots,
+      open: { stage.openFromGrid($0) },
+      close: { stage.closeFromGrid($0) },
+      scrollToken: stage.gridScroll
+    )
+    .frame(width: geometry.container.width, height: geometry.container.height)
+    .accessibilityHidden(!stage.isPresented || !app.deck.isGrid)
+  }
+
+  private var gridTabs: [BrowserTab] {
+    let needle = stage.query.trimmingCharacters(in: .whitespacesAndNewlines)
+    let ordered = app.deckOrder
+    guard !needle.isEmpty else { return ordered }
+    return ordered.filter { TabText.matches($0, needle) }
+  }
+}
+
+/// The bottom bar. It is on screen from the first frame the deck is, and becomes the page's bar the
+/// moment a tab is tapped, so the bar never disappears, fades or swaps late.
+struct DeckStageBar: View {
+  @Bindable var stage: DeckStageModel
+  @Environment(AppModel.self) private var app
+  @FocusState private var isSearchFocused: Bool
+
+  var body: some View {
+    let geometry = stage.geometry
+    ZStack(alignment: .bottom) {
+        DeckBottomBar(
+          geometry: geometry,
+          isGrid: app.deck.isGrid,
+          query: $stage.query,
+          searchFocus: $isSearchFocused,
+          plus: PlusActions(
+            isIncognito: app.isIncognito,
+            canReopen: app.tabs.canReopenClosed,
+            newTab: { app.newTab() },
+            newRegularTab: { app.newRegularTab() },
+            newIncognitoTab: { app.newIncognitoTab() },
+            reopen: { app.reopenLastClosed() }
+          ),
+          toggleGrid: stage.toggleGrid
+        )
+        .frame(width: geometry.container.width)
+        .position(x: geometry.container.width / 2, y: barCenterY)
+    }
+    .frame(width: geometry.container.width, height: geometry.container.height)
+    .accessibilityHidden(!stage.isPresented)
+    .onChange(of: stage.blurSearch) { isSearchFocused = false }
+    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+      guard let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+      withAnimation(.smooth(duration: 0.3)) { stage.keyboardOverlap = max(0, geometry.container.height - frame.minY) }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+      withAnimation(.smooth(duration: 0.3)) { stage.keyboardOverlap = 0 }
+    }
+  }
+
+  private var barCenterY: CGFloat {
+    let geometry = stage.geometry
+    guard stage.keyboardOverlap > 0 else { return geometry.barCenterY }
+    return geometry.container.height - stage.keyboardOverlap - TabsLayout.barGap - TabsLayout.barCircle / 2
+  }
+}
+
+/// The browsing bar drawn where BrowsingView draws it, inert, for the frames between tapping a
+/// card and the deck leaving.
+struct PageBarStandIn: View {
+  let safeSide: CGFloat
+  @Environment(AppModel.self) private var app
+
+  var body: some View {
+    let tab = app.tabs.selectedTab
+    let page = app.currentPage
+    let scheme = tab.flatMap { app.browse.tone(for: $0, page: page).bottom?.scheme }
+    BottomBar(
+      address: BarAddress(tab: tab, page: page),
+      isCollapsed: false,
+      sideInset: safeSide,
+      actions: BarActions(onTabs: {}, onAddress: {}, onPlus: {}, onMore: {}, onExpand: {}, onStep: { _ in }, onSelectTab: { _ in }, onCloseTab: {})
+    )
+    .padding(.bottom, BrowseLayout.barBottomGap)
+    .modifier(OptionalColorScheme(scheme: scheme))
+    .frame(maxHeight: .infinity, alignment: .bottom)
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+  }
+}
+
+struct OptionalColorScheme: ViewModifier {
+  let scheme: ColorScheme?
+
+  func body(content: Content) -> some View {
+    if let scheme {
+      content.environment(\.colorScheme, scheme)
+    } else {
+      content
+    }
+  }
+}
+
+/// Mounts the deck stage once and keeps it: opening the deck is a state change, never a view build.
+struct DeckStageHost: UIViewControllerRepresentable {
+  let surface: AppModel.Surface
+  @Environment(AppModel.self) private var app
+  @Environment(\.profileLook) private var look
+  @Environment(\.usesGlass) private var usesGlass
+  @Environment(\.screenLayout) private var screenLayout
+
+  func makeUIViewController(context: Context) -> DeckStageController {
+    app.usesDeckStage = true
+    let controller = DeckStageController(app: app)
+    app.deckStage = controller
+    Task { @MainActor [weak controller] in
+      try? await Task.sleep(for: .seconds(1.5))
+      controller?.prewarm()
+    }
+    return controller
+  }
+
+  func updateUIViewController(_ controller: DeckStageController, context: Context) {
+    controller.environment = DeckStageEnvironment(look: look, usesGlass: usesGlass, screenLayout: screenLayout)
+    controller.surfaceChanged(surface)
+  }
+
+  static func dismantleUIViewController(_ controller: DeckStageController, coordinator: ()) {
+    controller.app.usesDeckStage = false
+  }
+}

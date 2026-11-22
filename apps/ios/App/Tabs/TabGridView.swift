@@ -13,6 +13,8 @@ struct TabGridView: View {
   let snapshots: TabSnapshotStore
   let open: (UUID) -> Void
   let close: (UUID) -> Void
+  /// Bumped by a grid that stays mounted between showings, to bring the selected tab into view.
+  var scrollToken = 0
 
   static let fade: CGFloat = 14
 
@@ -47,6 +49,9 @@ struct TabGridView: View {
       }
       .padding(.top, topInset - Self.fade)
       .onAppear {
+        if let id = selectedID ?? tabs.last?.id { reader.scrollTo(id, anchor: .center) }
+      }
+      .onChange(of: scrollToken) {
         if let id = selectedID ?? tabs.last?.id { reader.scrollTo(id, anchor: .center) }
       }
     }

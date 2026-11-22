@@ -46,6 +46,7 @@ enum DemoSeed {
 
   @MainActor
   static func seed(_ app: AppModel) {
+    if HarnessSeed.seedIfRequested(app) { return }
     let tabs = app.tabs
     guard tabs.openTabs.isEmpty else { return }
     let now = Date.now

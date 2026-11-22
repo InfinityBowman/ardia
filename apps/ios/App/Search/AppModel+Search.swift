@@ -60,6 +60,7 @@ extension AppModel {
   }
 
   func cancelSearch() {
+    HarnessProbe.mark("search.close")
     let request = browse.search
     browse.dismissSearch()
     if surface == .search, request?.origin != .start, let id = tabs.selectedTabID {

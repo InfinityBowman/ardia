@@ -38,6 +38,11 @@ public final class TabSnapshotStore {
     return name
   }
 
+  /// The decoded image if it is already in memory, so a view can show it on its first frame.
+  public func cachedImage(named name: String) -> CGImage? {
+    cache.object(forKey: name as NSString)
+  }
+
   public func image(named name: String) async -> CGImage? {
     if let cached = cache.object(forKey: name as NSString) { return cached }
     guard !name.hasPrefix("memory-") else { return nil }

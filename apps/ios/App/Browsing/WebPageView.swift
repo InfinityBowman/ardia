@@ -337,6 +337,7 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   }
 
   private func showPlaceholder() {
+    HarnessProbe.mark("page.placeholder")
     guard let tab = placeholderTab else { return }
     placeholderHost?.view.layer.removeAllAnimations()
     placeholderHost?.view.removeFromSuperview()

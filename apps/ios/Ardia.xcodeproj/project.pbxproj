@@ -310,19 +310,19 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					AF56FEA9443A3F2A9D139653 = {
-						DevelopmentTeam = U5L5T3NGVV;
+						DevelopmentTeam = J2BA26F2V7;
 						ProvisioningStyle = Automatic;
 					};
 					CF60F2D18AB253CC46A4E428 = {
-						DevelopmentTeam = U5L5T3NGVV;
+						DevelopmentTeam = J2BA26F2V7;
 						ProvisioningStyle = Automatic;
 					};
 					DD52C294A990971E005E6738 = {
-						DevelopmentTeam = U5L5T3NGVV;
+						DevelopmentTeam = J2BA26F2V7;
 						ProvisioningStyle = Automatic;
 					};
 					DD96EB2018C132DC7649EED8 = {
-						DevelopmentTeam = U5L5T3NGVV;
+						DevelopmentTeam = J2BA26F2V7;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -445,7 +445,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.ardia.browser.ios.share;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jacobmaynard.ardia.share;
 				PRODUCT_NAME = ArdiaShare;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -490,7 +490,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = U5L5T3NGVV;
+				DEVELOPMENT_TEAM = J2BA26F2V7;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -537,7 +537,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.ardia.browser.ios.share;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jacobmaynard.ardia.share;
 				PRODUCT_NAME = ArdiaShare;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -557,7 +557,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.ardia.browser.ios.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jacobmaynard.ardia.widgets;
 				PRODUCT_NAME = ArdiaWidgets;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -594,7 +594,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.ardia.browser.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jacobmaynard.ardia;
 				PRODUCT_NAME = Ardia;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -614,7 +614,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.ardia.browser.ios.open;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jacobmaynard.ardia.open;
 				PRODUCT_NAME = ArdiaOpen;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -659,7 +659,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = U5L5T3NGVV;
+				DEVELOPMENT_TEAM = J2BA26F2V7;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -699,7 +699,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.ardia.browser.ios.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jacobmaynard.ardia.widgets;
 				PRODUCT_NAME = ArdiaWidgets;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -736,7 +736,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.ardia.browser.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jacobmaynard.ardia;
 				PRODUCT_NAME = Ardia;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -756,7 +756,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.ardia.browser.ios.open;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jacobmaynard.ardia.open;
 				PRODUCT_NAME = ArdiaOpen;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;

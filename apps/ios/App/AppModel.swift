@@ -44,6 +44,8 @@ final class AppModel {
   var surface: Surface = .search
   var sheet: Sheet?
   var isIncognito = false
+  @ObservationIgnored var usesDeckStage = false
+  @ObservationIgnored weak var deckStage: DeckStageController?
   @ObservationIgnored var inboxInFlight: Set<UUID> = []
   @ObservationIgnored var inboxSent: Set<UUID> = []
 

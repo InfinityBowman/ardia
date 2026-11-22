@@ -10,6 +10,14 @@ struct TabCardContent: View {
 
   @State private var stored: CGImage?
 
+  init(tab: BrowserTab, isIncognito: Bool, memoryImage: UIImage?, snapshots: TabSnapshotStore) {
+    self.tab = tab
+    self.isIncognito = isIncognito
+    self.memoryImage = memoryImage
+    self.snapshots = snapshots
+    _stored = State(initialValue: memoryImage == nil ? tab.snapshotFileName.flatMap(snapshots.cachedImage(named:)) : nil)
+  }
+
   var body: some View {
     ZStack(alignment: .top) {
       background
@@ -33,6 +41,10 @@ struct TabCardContent: View {
     .clipped()
     .task(id: tab.snapshotFileName) {
       guard memoryImage == nil, let name = tab.snapshotFileName else { return }
+      if let cached = snapshots.cachedImage(named: name) {
+        stored = cached
+        return
+      }
       stored = await snapshots.image(named: name)
     }
   }

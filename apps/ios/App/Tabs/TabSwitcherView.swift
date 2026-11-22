@@ -34,6 +34,8 @@ private enum DeckPhase: Equatable {
   case opening(UUID?)
   case settled
   case closing(UUID)
+  /// The zoom-out running backwards into the tab it came from, interrupted mid-flight by a tap.
+  case returning(UUID)
 }
 
 private enum DragAxis {
@@ -84,8 +86,10 @@ struct TabDeck: View {
   private var currentScroll: Double { dragScroll ?? scroll }
 
   private var isOpeningTab: Bool {
-    if case .closing = phase { return true }
-    return false
+    switch phase {
+    case .closing, .returning: true
+    case .opening, .settled: false
+    }
   }
 
   private var geometry: TabsDeckGeometry {
@@ -190,7 +194,7 @@ struct TabDeck: View {
         )
         .frame(width: geometry.container.width)
         .position(x: geometry.container.width / 2, y: barCenterY(geometry))
-        .opacity(chromeOpacity)
+        .opacity(isOpeningTab ? 0 : 1)
         .zIndex(Self.overlayLayer + 3)
       }
     }
@@ -199,6 +203,11 @@ struct TabDeck: View {
         DeckCover(image: cover)
           .opacity(coverOpacity)
           .allowsHitTesting(false)
+      }
+    }
+    .overlay(alignment: .bottom) {
+      if isOpeningTab, column == nil {
+        pageBarStandIn
       }
     }
     .sensoryFeedback(.selection, trigger: focusTicks)
@@ -336,9 +345,29 @@ struct TabDeck: View {
     }
   }
 
+  /// The browsing bar, drawn where BrowsingView draws it, from the moment a tab is tapped. The
+  /// deck's own bar used to linger until the deck was removed and then swap; now the bar you
+  /// land on is already in place, so the hand-off is invisible.
+  private var pageBarStandIn: some View {
+    let tab = app.tabs.selectedTab
+    let page = app.currentPage
+    let scheme = tab.flatMap { app.browse.tone(for: $0, page: page).bottom?.scheme }
+    return BottomBar(
+      address: BarAddress(tab: tab, page: page),
+      isCollapsed: false,
+      sideInset: base.safeSide,
+      actions: BarActions(onTabs: {}, onAddress: {}, onPlus: {}, onMore: {}, onExpand: {}, onStep: { _ in }, onSelectTab: { _ in }, onCloseTab: {})
+    )
+    .padding(.bottom, BrowseLayout.barBottomGap)
+    .modifier(OptionalColorScheme(scheme: scheme))
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+  }
+
   private var backdropOpacity: Double {
     if case .opening(let id) = phase, id != nil { return min(1, positionProgress * 1.4) }
     if case .closing = phase { return min(1, positionProgress * 1.4) }
+    if case .returning = phase { return min(1, positionProgress * 1.4) }
     return 1
   }
 
@@ -346,7 +375,7 @@ struct TabDeck: View {
     switch phase {
     case .settled: 1
     case .opening(let id): id == nil ? 1 : max(0, (positionProgress - 0.6) / 0.4)
-    case .closing: max(0, (positionProgress - 0.6) / 0.4)
+    case .closing, .returning: max(0, (positionProgress - 0.6) / 0.4)
     }
   }
 
@@ -364,6 +393,11 @@ struct TabDeck: View {
       return .stay
     case .opening(let expanded):
       guard let expanded, let expandedIndex = order.firstIndex(of: expanded) else { return .stay }
+      if id == expanded { return .expanded }
+      return index < expandedIndex ? .launcher : .slideRight
+    case .returning(let expanded):
+      // Same roles as the zoom-out so reversing it mid-flight is seamless.
+      guard let expandedIndex = order.firstIndex(of: expanded) else { return .stay }
       if id == expanded { return .expanded }
       return index < expandedIndex ? .launcher : .slideRight
     case .closing(let expanded):
@@ -384,6 +418,7 @@ struct TabDeck: View {
   }
 
   private func appear() {
+    HarnessProbe.mark("deck.appear")
     guard !didAppear else { return }
     didAppear = true
     order = sourceOrder
@@ -399,10 +434,10 @@ struct TabDeck: View {
       positionProgress = 0
       Task { @MainActor in
         withAnimation(TabsMotion.openScale) { scaleProgress = 1 }
-        withAnimation(TabsMotion.openPosition, completionCriteria: .removed) {
+        withAnimation(TabsMotion.openPosition, completionCriteria: .logicallyComplete) {
           positionProgress = 1
         } completion: {
-          phase = .settled
+          if case .opening = phase { phase = .settled }
         }
       }
     } else {
@@ -476,7 +511,25 @@ struct TabDeck: View {
     isShowingArchiveCard = false
   }
 
+  /// Lands an in-flight zoom-out at once so a tap or drag made during it is never dropped.
+  private func finishOpeningNow() {
+    guard case .opening = phase else { return }
+    var transaction = Transaction()
+    transaction.disablesAnimations = true
+    withTransaction(transaction) {
+      scaleProgress = 1
+      positionProgress = 1
+      phase = .settled
+    }
+  }
+
   private func open(_ id: UUID) {
+    HarnessProbe.mark("deck.cardTap")
+    if case .opening(id) = phase, !reduceMotion {
+      returnToOpeningTab(id)
+      return
+    }
+    finishOpeningNow()
     guard phase == .settled, lifts[id] == nil else { return }
     isSearchFocused = false
     if reduceMotion {
@@ -489,12 +542,34 @@ struct TabDeck: View {
       await app.primeCover(for: id)
       if case .closing(id) = phase { app.beginOpening(id) }
     }
-    withAnimation(TabsMotion.expand, completionCriteria: .removed) {
+    withAnimation(TabsMotion.expand, completionCriteria: .logicallyComplete) {
       scaleProgress = 0
       positionProgress = 0
     } completion: {
-      app.openTab(id)
+      openWithoutAnimation(id)
     }
+  }
+
+  /// Tapping the tab you came from while the deck is still zooming out reverses the zoom from
+  /// wherever it is, the way Arc does, instead of finishing it and playing a second animation.
+  private func returnToOpeningTab(_ id: UUID) {
+    HarnessProbe.mark("deck.return")
+    isSearchFocused = false
+    phase = .returning(id)
+    withAnimation(TabsMotion.expand, completionCriteria: .logicallyComplete) {
+      scaleProgress = 0
+      positionProgress = 0
+    } completion: {
+      if case .returning(id) = phase { openWithoutAnimation(id) }
+    }
+  }
+
+  /// Completion handlers run inside the finished animation's transaction, which made the deck's
+  /// removal animate and linger over the page. Opening the tab outside it removes the deck at once.
+  private func openWithoutAnimation(_ id: UUID) {
+    var transaction = Transaction()
+    transaction.disablesAnimations = true
+    withTransaction(transaction) { app.openTab(id) }
   }
 
   private func crossfadeOpen(_ id: UUID) {
@@ -611,6 +686,7 @@ struct TabDeck: View {
   private func deckDrag(for id: UUID?) -> some Gesture {
     DragGesture(minimumDistance: 10)
       .onChanged { value in
+        finishOpeningNow()
         guard phase == .settled else { return }
         if axis == nil {
           let dx = value.translation.width
@@ -666,3 +742,4 @@ struct TabDeck: View {
       }
   }
 }
+

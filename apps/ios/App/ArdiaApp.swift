@@ -8,6 +8,7 @@ struct ArdiaApp: App {
   @State private var model: AppModel
 
   init() {
+    HarnessProbe.start()
     SyncService.registerBackgroundRefresh()
     let launched = AppModel.launch()
     _model = State(initialValue: launched)

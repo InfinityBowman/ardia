@@ -28,10 +28,6 @@ final class BrowseSession {
   var deckRequested = false
   var tones: [UUID: PageTone] = [:]
 
-  var isSearchTrayOnScreen: Bool {
-    search != nil || trayHoldsKeyboard
-  }
-
   struct StepRequest: Equatable {
     let id = UUID()
     let delta: Int
@@ -44,6 +40,7 @@ final class BrowseSession {
   @ObservationIgnored private var feedbackTask: Task<Void, Never>?
 
   func presentSearch(from origin: SearchOrigin, text: String = "", selectsAll: Bool = false, incognitoOnCancel: Bool? = nil) {
+    HarnessProbe.mark("search.open")
     guard search == nil else { return }
     search = SearchRequest(origin: origin, initialText: text, selectsAll: selectsAll, incognitoOnCancel: incognitoOnCancel)
   }
@@ -61,7 +58,7 @@ final class BrowseSession {
   func thawOrder() {
     unfreezeTask?.cancel()
     unfreezeTask = nil
-    frozenOrder = nil
+    if frozenOrder != nil { frozenOrder = nil }
   }
 
   func setTone(_ tone: PageTone, for id: UUID) {
