@@ -1,3 +1,4 @@
+import { foreignWriteHooks } from "../browser/foreignWriteHooks";
 import { cleanUrl, markdownLink } from "@ardia/core";
 import { copyText } from "../../platform/clipboard";
 import { prompt } from "../../platform/dialogs";
@@ -14,6 +15,8 @@ import type { Tab } from "../browser/types";
 import { awaitsFirstPage } from "../tabs/pendingAddress";
 import { noteUrlCopied } from "../telemetry/urlCopies";
 import { noteRangeSelect } from "../telemetry/tabPresses";
+import { noteTextOnlyRow } from "../telemetry/tabStripCounts";
+import { NO_ROW_ICON } from "../pins/rowIcons";
 import type { BookmarkFolderChoice } from "./menuParts";
 import { DEFAULT_SIDEBAR_WIDTH } from "../../lib/windowLayout";
 import { activeLook } from "../../lib/activeLook";
@@ -67,7 +70,7 @@ export async function startRename(windowId: string, target: Target) {
         confirmTitle: "Update",
         windowId,
       });
-      if (name !== null) store().updateTab(tab.id, { customTitle: name });
+      if (name !== null) foreignWriteHooks.around(() => store().updateTab(tab.id, { customTitle: name }));
       return;
     }
     const group = groupOf(s, tab.id);
@@ -91,7 +94,7 @@ async function renameGroupInSheet(windowId: string, groupId: string) {
     confirmTitle: "Update",
     windowId,
   });
-  if (name !== null && store().groups[groupId]) store().updateGroup(groupId, { name: name.trim() });
+  if (name !== null && store().groups[groupId]) foreignWriteHooks.around(() => store().updateGroup(groupId, { name: name.trim() }));
 }
 
 export function commitRename(target: Target, text: string) {
@@ -114,6 +117,7 @@ export async function openIconPicker(windowId: string, target: Target) {
 }
 
 export function setIcon(target: Target, icon: string | null) {
+  if (target.kind === "tab" && icon === NO_ROW_ICON) noteTextOnlyRow();
   if (target.kind === "tab") store().updateTab(target.id, { customIcon: icon });
   else if (target.kind === "live") updateFolder(target.id.split("|")[1] ?? "", { icon });
   else store().updateGroup(target.id, { icon });

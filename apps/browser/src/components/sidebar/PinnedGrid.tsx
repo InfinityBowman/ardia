@@ -79,19 +79,20 @@ export function PinFieldZone({ top, height }: { top: number; height: number }) {
         borderRadius: radius.chrome,
         borderWidth: active ? 1.5 : 1,
         borderStyle: "dashed",
-        borderColor: active ? theme.accent : tokens.dragBorder,
+        borderColor: active ? tokens.dropMark : tokens.dragBorder,
         backgroundColor: tokens.dragSilhouette,
         alignItems: "center",
         justifyContent: "center",
       }}
     >
-      <PinGlyph color={active ? theme.accent : theme.textSecondary} />
+      <PinGlyph color={active ? tokens.dropMark : theme.textSecondary} />
     </View>
   );
 }
 
-export function PinSlotZone() {
+export function PinSlotZone({ top = 0 }: { top?: number }) {
   const theme = useTheme();
+  const tokens = useSidebarTokens();
   const controller = useDragController();
   const active = useDropPins();
   const gap = controller?.items.get(tailKey("tiles"))?.gap;
@@ -110,7 +111,7 @@ export function PinSlotZone() {
           left: layout.sidebarInset,
           right: layout.sidebarInset,
           top: 0,
-          height: active ? firstRowTop + layout.pinnedHeight : firstRowTop - layout.rowGap,
+          height: top + (active ? firstRowTop + layout.pinnedHeight : firstRowTop - layout.rowGap),
         }}
       />
       <Animated.View
@@ -119,19 +120,19 @@ export function PinSlotZone() {
           position: "absolute",
           left: layout.sidebarInset,
           right: layout.sidebarInset,
-          top: firstRowTop,
+          top: top + firstRowTop,
           height: layout.pinnedHeight,
           opacity,
           borderRadius: radius.pinned,
           borderWidth: 1.5,
           borderStyle: "dashed",
-          borderColor: theme.accent,
+          borderColor: tokens.dropMark,
           backgroundColor: theme.dropZoneFill,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <PinGlyph color={theme.accent} />
+        <PinGlyph color={tokens.dropMark} />
       </Animated.View>
     </>
   );
@@ -169,7 +170,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width, sliding, x, y }: { t
         {...hoverProps}
         onDoubleClick={() => returnShownTabToPinnedUrl(windowId, tabId)}
       >
-        <TabPressArea windowId={windowId} tab={tab}>
+        <TabPressArea windowId={windowId} tab={tab} selected={selected}>
           {({ pressed }) => (
             <TileFace tabId={tabId} width={width} active={active} selected={selected} hovered={hovered} pressed={pressed} />
           )}

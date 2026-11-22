@@ -3,7 +3,7 @@ import type { ProfileColor } from "../../lib/profileLook";
 import { parseColor } from "../../lib/color";
 import { font, radius, weight, withFace, withMono } from "./look";
 
-export { font, lineHeight, monoFace, perLook, proseLineHeight, radius, typeFace, weight, withFace, withMono } from "./look";
+export { font, lineHeight, monoFace, perLook, proseLineHeight, radius, sidebarFont, sidebarIconSize, sidebarLineHeight, sidebarPoints, typeFace, weight, withFace, withMono } from "./look";
 
 export function withAlpha(color: string, alpha: number): string {
   const [r, g, b] = parseColor(color);
@@ -11,6 +11,8 @@ export function withAlpha(color: string, alpha: number): string {
 }
 
 export const ink = { white: "#FFFFFF", black: "#000000", clear: "#00000000", neutralGrey: "#808080A6" } as const;
+
+export const HIGH_CONTRAST_INK = { tab: 1, icon: 1, placeholder: 0.82, secondary: 0.82, tertiary: 0.7 } as const;
 
 const darkRoles = {
   dark: true,
@@ -369,6 +371,6 @@ export const sheetWidth = { xs: 320, s: 420, m: 440, l: 480, xl: 560 } as const;
 
 export type SheetSize = keyof typeof sheetWidth;
 
-export const toastLayout = { bottom: space.xxxl, maxWidth: 420, rise: 10 } as const;
+export const toastLayout = { bottom: space.xxxl, maxWidth: 420 } as const;
 
 export const POPOVER_WIDTH = { s: 300, m: 340, l: 360 } as const;
