@@ -179,27 +179,33 @@ struct ToolbarSheet: View {
           .frame(maxWidth: .infinity)
           .transition(.opacity)
       } else {
-        Text(titleText)
-          .foregroundStyle(.primary)
-          .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center)
-          .transition(.opacity)
+        HStack(spacing: Spacing.hairline) {
+          if address.isInsecure {
+            Text("Not Secure")
+              .foregroundStyle(BrowsePalette.notSecure)
+              .fixedSize()
+          }
+          Text(address.host)
+            .foregroundStyle(.primary)
+            .truncationMode(.middle)
+        }
+        .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center)
+        .transition(.opacity)
       }
     }
-    .font(.body)
+    .font(.body.weight(.semibold))
     .padding(.horizontal, Spacing.hairline)
     .contentShape(.rect)
     .onTapGesture { editQuery() }
     .accessibilityAddTraits(.isButton)
-    .accessibilityLabel(app.browse.titleFeedback ?? titleText)
-    .accessibilityHint("Edits the search")
+    .accessibilityLabel(app.browse.titleFeedback.map { Text($0) } ?? Text("Address"))
+    .accessibilityValue(address.isInsecure ? Text("\(address.host), Not Secure") : Text(address.host))
+    .accessibilityHint("Edits this page’s address.")
     .animation(.easeOut(duration: 0.15), value: app.browse.titleFeedback)
   }
 
-  private var titleText: String {
-    guard let tab else { return "" }
-    let query = app.currentQuery(for: tab)
-    if query != tab.url { return query }
-    return tab.title.isEmpty ? (BrowserURL.host(of: tab.url) ?? tab.url) : tab.title
+  private var address: BarAddress {
+    BarAddress(tab: tab, page: page)
   }
 
   private func capsuleButton(_ symbol: String, label: LocalizedStringKey, enabled: Bool, action: @escaping () -> Void) -> some View {

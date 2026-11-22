@@ -49,7 +49,7 @@ struct BarTabsButton: View {
     .buttonStyle(BarButtonStyle())
     .chromeSurface(in: .circle)
     .classicBarShadow()
-    .contextMenu { recentTabsMenu(order) }
+    .contextMenu { BarRecentTabsMenu(order: order, actions: actions) }
     .accessibilityLabel("Tabs")
     .accessibilityValue(Text("^[\(order.count) tab](inflect: true)"))
     .accessibilityHint("Touch and hold for recent tabs.")
@@ -58,15 +58,95 @@ struct BarTabsButton: View {
       Button("Next Tab") { actions.onStep(1) }
     }
   }
+}
 
-  @ViewBuilder
-  private func recentTabsMenu(_ order: [BrowserTab]) -> some View {
+struct BarTabsStackButton: View {
+  let actions: BarActions
+
+  @Environment(AppModel.self) private var app
+
+  var body: some View {
+    let order = app.deckOrder
+    let others = order.filter { $0.id != app.tabs.selectedTabID }
+    let front = others.last ?? order.last
+    let back = others.count > 1 ? others[others.count - 2] : nil
+    Button(action: actions.onTabs) {
+      ArcTabStack(back: back, front: front)
+        .contentShape(.rect)
+    }
+    .buttonStyle(BarButtonStyle())
+    .padding(.leading, BrowseLayout.barSide)
+    .contextMenu { BarRecentTabsMenu(order: order, actions: actions) }
+    .accessibilityLabel("Tabs")
+    .accessibilityValue(Text("^[\(order.count) tab](inflect: true)"))
+    .accessibilityHint("Touch and hold for recent tabs.")
+    .accessibilityActions {
+      Button("Previous Tab") { actions.onStep(-1) }
+      Button("Next Tab") { actions.onStep(1) }
+    }
+  }
+}
+
+struct BarRecentTabsMenu: View {
+  let order: [BrowserTab]
+  let actions: BarActions
+
+  @Environment(AppModel.self) private var app
+
+  var body: some View {
     let recent = order.filter { $0.id != app.tabs.selectedTabID }.suffix(8).reversed()
     ForEach(Array(recent)) { tab in
       Button(TabText.title(for: tab)) { actions.onSelectTab(tab.id) }
     }
     if !recent.isEmpty { Divider() }
     Button("Close Tab", systemImage: "xmark", role: .destructive, action: actions.onCloseTab)
+  }
+}
+
+struct BarPlusCapsule: View {
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      Image(systemName: "plus")
+        .font(.system(size: BrowseLayout.barPlusGlyph, weight: .medium))
+        .foregroundStyle(BrowsePalette.barGlyph)
+        .frame(width: BrowseLayout.barPlus.width, height: BrowseLayout.barPlus.height)
+        .background(BrowsePalette.barPlusFill, in: .capsule)
+        .frame(height: BrowseLayout.barControl)
+        .contentShape(.capsule)
+    }
+    .buttonStyle(BarPressStyle())
+    .accessibilityLabel("New Search")
+  }
+}
+
+struct BarPageMenuButton: View {
+  let address: BarAddress
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      Image(systemName: "chevron.up")
+        .font(.system(size: BrowseLayout.barChevronGlyph, weight: .semibold))
+        .foregroundStyle(BrowsePalette.barGlyph)
+        .frame(width: BrowseLayout.barCircle, height: BrowseLayout.barCircle)
+        .background(BrowsePalette.barCircleFill, in: .circle)
+        .frame(width: BrowseLayout.hitTarget, height: BrowseLayout.barControl)
+        .contentShape(.rect)
+    }
+    .buttonStyle(BarPressStyle())
+    .accessibilityLabel("Page Menu")
+    .accessibilityValue(address.isInsecure ? Text("\(address.host), Not Secure") : Text(address.host))
+    .accessibilityHint("Shows this page’s address and actions.")
+  }
+}
+
+struct BarPressStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .brightness(configuration.isPressed ? 0.08 : 0)
+      .sensoryFeedback(.impact(weight: .light, intensity: 0.5), trigger: configuration.isPressed) { _, pressed in pressed }
   }
 }
 
@@ -85,117 +165,6 @@ struct BarPlusButton: View {
     .chromeSurface(in: .circle)
     .classicBarShadow()
     .accessibilityLabel("New Search")
-  }
-}
-
-struct BarMenuButton: View {
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      Image(systemName: "ellipsis")
-        .font(.system(size: BrowseLayout.barMenuGlyph, weight: .semibold))
-        .foregroundStyle(BrowsePalette.foregroundPrimary)
-        .frame(width: BrowseLayout.barControl, height: BrowseLayout.barControl)
-        .contentShape(.rect)
-    }
-    .buttonStyle(BarButtonStyle())
-    .accessibilityLabel("Page Menu")
-  }
-}
-
-struct BarAddressLabel: View {
-  let address: BarAddress
-  var compact = false
-
-  @ScaledMetric(relativeTo: .subheadline) private var iconSize: CGFloat = 16
-  @ScaledMetric(relativeTo: .subheadline) private var compactIconSize: CGFloat = 13
-  @ScaledMetric(relativeTo: .subheadline) private var textSize: CGFloat = 15
-  @ScaledMetric(relativeTo: .subheadline) private var compactTextSize: CGFloat = 13.5
-  @ScaledMetric(relativeTo: .subheadline) private var warningSize: CGFloat = 13
-
-  var body: some View {
-    HStack(spacing: BrowseLayout.barAddressSpacing) {
-      if address.isInsecure {
-        Text("Not Secure")
-          .font(.system(size: warningSize, weight: .medium))
-          .foregroundStyle(BrowsePalette.notSecure)
-          .lineLimit(1)
-          .fixedSize()
-      } else {
-        siteMark
-      }
-      Text(address.host)
-        .foregroundStyle(BrowsePalette.foregroundPrimary)
-        .lineLimit(1)
-        .truncationMode(.middle)
-    }
-    .font(.system(size: compact ? compactTextSize : textSize, weight: compact ? .medium : .regular))
-    .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-  }
-
-  @ViewBuilder
-  private var siteMark: some View {
-    let size = compact ? compactIconSize : iconSize
-    if address.isPrivate {
-      Image(systemName: "eyeglasses")
-        .font(.system(size: size * 0.92, weight: .regular))
-        .foregroundStyle(BrowsePalette.foregroundSecondary)
-        .accessibilityHidden(true)
-    } else if address.pageURL != nil {
-      FaviconImage(iconURL: address.iconURL, pageURL: address.pageURL, size: size)
-        .accessibilityHidden(true)
-    }
-  }
-}
-
-struct BarAddressField: View {
-  let address: BarAddress
-  var showsMenu = true
-  let onAddress: () -> Void
-  let onMore: () -> Void
-
-  var body: some View {
-    HStack(spacing: 0) {
-      Button(action: onAddress) {
-        BarAddressLabel(address: address)
-          .padding(.leading, BrowseLayout.barAddressLead)
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-          .contentShape(.rect)
-      }
-      .buttonStyle(BarButtonStyle())
-      .accessibilityLabel(address.isInsecure ? Text("Address, Not Secure") : Text("Address"))
-      .accessibilityValue(Text(address.host))
-      .accessibilityHint("Opens search with this page’s address.")
-      if showsMenu {
-        BarMenuButton(action: onMore)
-          .padding(.trailing, BrowseLayout.barMenuTrail)
-      }
-    }
-    .frame(height: BrowseLayout.barControl)
-    .frame(maxWidth: .infinity)
-    .chromeSurface(in: .capsule)
-    .classicBarShadow()
-  }
-}
-
-struct BarCollapsedPill: View {
-  let address: BarAddress
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      BarAddressLabel(address: address, compact: true)
-        .padding(.horizontal, Spacing.small)
-        .frame(height: BrowseLayout.barCollapsedHeight)
-        .contentShape(.capsule)
-    }
-    .buttonStyle(BarButtonStyle())
-    .chromeSurface(in: .capsule)
-    .classicBarShadow()
-    .frame(maxWidth: BrowseLayout.barCollapsedMaxWidth)
-    .accessibilityLabel(Text("Show Toolbar"))
-    .accessibilityValue(Text(address.host))
   }
 }
 

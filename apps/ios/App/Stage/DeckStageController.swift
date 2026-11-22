@@ -112,7 +112,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     topChrome.rootView = AnyView(DeckStageTopChrome(stage: stage).deckStageEnvironment(app, environment))
     grid.rootView = AnyView(DeckStageGrid(stage: stage).deckStageEnvironment(app, environment))
     bar.rootView = AnyView(DeckStageBar(stage: stage).deckStageEnvironment(app, environment))
-    pageBar.rootView = AnyView(PageBarStandIn(safeSide: stage.geometry.safeSide).deckStageEnvironment(app, environment))
+    pageBar.rootView = AnyView(PageBarStandIn(stage: stage).deckStageEnvironment(app, environment))
   }
 
   override func viewDidLayoutSubviews() {

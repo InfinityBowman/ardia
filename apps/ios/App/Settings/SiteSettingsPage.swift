@@ -54,7 +54,7 @@ struct SiteSettingsPage: View {
         }
         .tint(.secondary)
         Toggle(isOn: $settings.collapsesBottomBar) {
-          SettingsRowLabel("Collapse Bottom Bar", systemImage: "platter.filled.bottom.and.arrow.down.iphone", tint: SettingsTint.bottomBar)
+          SettingsRowLabel("Hide Bar When Scrolling", systemImage: "platter.filled.bottom.and.arrow.down.iphone", tint: SettingsTint.bottomBar)
         }
       } footer: {
         Text("Change one site from its page menu.")

@@ -9,12 +9,11 @@ struct BottomBar: View {
   }
 
   let address: BarAddress
-  let isCollapsed: Bool
   var arrangement = Arrangement.row
   var sideInset: CGFloat = 0
+  var safeBottom: CGFloat = 0
+  var pageColor: Color?
   let actions: BarActions
-
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     if case .column(let column, let size) = arrangement {
@@ -30,31 +29,48 @@ struct BottomBar: View {
   }
 
   private var rowBar: some View {
-    ZStack(alignment: .bottom) {
-      if isCollapsed {
-        BarCollapsedPill(address: address, action: actions.onExpand)
-          .transition(.scale(scale: reduceMotion ? 1 : 1 / BrowseLayout.barCollapsedScale, anchor: .bottom).combined(with: .opacity))
-      } else {
-        expanded
-          .transition(.scale(scale: reduceMotion ? 1 : BrowseLayout.barCollapsedScale, anchor: .bottom).combined(with: .opacity))
-      }
+    ZStack {
+      BarTabsStackButton(actions: actions)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      BarPlusCapsule(action: actions.onPlus)
+      BarPageMenuButton(address: address, action: actions.onMore)
+        .padding(.trailing, BrowseLayout.barSide - (BrowseLayout.hitTarget - BrowseLayout.barCircle) / 2)
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
+    .frame(height: BrowseLayout.barControl)
+    .padding(.horizontal, sideInset)
+    .padding(.bottom, safeBottom + BrowseLayout.barButtonLine - BrowseLayout.barControl / 2)
     .frame(maxWidth: .infinity)
-    .padding(.horizontal, sideInset + BrowseLayout.barEdgeInset)
-  }
-
-  @ViewBuilder
-  private var expanded: some View {
-    switch arrangement {
-    case .row:
-      HStack(spacing: BrowseLayout.barGap) {
-        BarTabsButton(actions: actions)
-        BarAddressField(address: address, onAddress: actions.onAddress, onMore: actions.onMore)
-        BarPlusButton(action: actions.onPlus)
-      }
-    case .column:
-      EmptyView()
+    .background(alignment: .bottom) {
+      BarBand(height: BrowseLayout.barBand + safeBottom, pageColor: pageColor)
     }
+  }
+}
+
+struct BarBand: View {
+  let height: CGFloat
+  let pageColor: Color?
+
+  var body: some View {
+    let line = BrowseLayout.barBand - BrowseLayout.barButtonLine
+    VStack(spacing: 0) {
+      LinearGradient(colors: [BrowsePalette.barBandTop.opacity(0), BrowsePalette.barFadeEdge], startPoint: .top, endPoint: .bottom)
+        .frame(height: BrowseLayout.barFade)
+      LinearGradient(
+        stops: [
+          .init(color: BrowsePalette.barBandTop, location: 0),
+          .init(color: BrowsePalette.barBandMiddle, location: line / height),
+          .init(color: BrowsePalette.barBandBottom, location: BrowseLayout.barBand / height),
+          .init(color: BrowsePalette.barBandBottom, location: 1),
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+      .background(pageColor ?? Color(.systemBackground))
+      .frame(height: height)
+    }
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
   }
 }
 
@@ -96,6 +112,37 @@ struct TabStackGlyph: View {
   }
 }
 
+struct ArcTabStack: View {
+  let back: BrowserTab?
+  let front: BrowserTab?
+
+  var body: some View {
+    let width = BrowseLayout.tabsButtonWidth
+    let height = BrowseLayout.barControl
+    let origin = CGPoint(x: BrowseLayout.barSide, y: height / 2)
+    ZStack(alignment: .topLeading) {
+      if let back {
+        TabThumbnail(tab: back)
+          .rotationEffect(.degrees(BrowseLayout.tabStackBackTilt))
+          .position(x: BrowseLayout.tabStackBack.x - origin.x, y: origin.y + BrowseLayout.tabStackBack.y)
+      }
+      if let front {
+        TabThumbnail(tab: front)
+          .rotationEffect(.degrees(BrowseLayout.tabStackFrontTilt))
+          .position(x: BrowseLayout.tabStackFront.x - origin.x, y: origin.y + BrowseLayout.tabStackFront.y)
+      } else {
+        RoundedRectangle(cornerRadius: BrowseLayout.tabStackRadius, style: .continuous)
+          .strokeBorder(BrowsePalette.barGlyph, lineWidth: 1.5)
+          .frame(width: BrowseLayout.tabStackTile.width, height: BrowseLayout.tabStackTile.height)
+          .rotationEffect(.degrees(BrowseLayout.tabStackFrontTilt))
+          .position(x: BrowseLayout.tabStackFront.x - origin.x, y: origin.y + BrowseLayout.tabStackFront.y)
+      }
+    }
+    .frame(width: width, height: height)
+    .accessibilityHidden(true)
+  }
+}
+
 struct TabThumbnail: View {
   let tab: BrowserTab
 
@@ -126,7 +173,7 @@ struct TabThumbnail: View {
     .frame(width: size.width, height: size.height)
     .clipShape(shape)
     .overlay { shape.strokeBorder(BarPalette.tileEdge, lineWidth: 0.5) }
-    .shadow(color: .black.opacity(0.2), radius: 1.5, y: 0.5)
+    .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
     .task(id: tab.snapshotFileName) {
       guard let name = tab.snapshotFileName else {
         image = nil

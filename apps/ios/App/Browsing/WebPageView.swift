@@ -11,6 +11,7 @@ struct WebPageView: UIViewRepresentable {
   var swipeMode: SwipeNavigationMode
   var topInset: CGFloat = 0
   var bottomInset: CGFloat
+  var barLink: BarScrollLink?
   var onTone: (UUID, PageTone) -> Void = { _, _ in }
 
   func makeUIView(context: Context) -> PageContainerView {
@@ -25,6 +26,7 @@ struct WebPageView: UIViewRepresentable {
     view.onTone = onTone
     view.topInset = topInset
     view.bottomInset = bottomInset
+    view.barLink = barLink
     guard let page else {
       view.show(nil, cover: nil, isLoading: false, progress: 0)
       return
@@ -56,6 +58,8 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   }
 
   var placeholderTab: BrowserTab?
+  weak var barLink: BarScrollLink?
+  private weak var linkedPan: UIPanGestureRecognizer?
   var backdrop: Color = ProfileLook.plum.surface {
     didSet { backgroundColor = UIColor(backdrop) }
   }
@@ -279,12 +283,23 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   }
 
   private func observeScroll(of webView: WKWebView) {
-    scrollObservation = webView.scrollView.observe(\.contentOffset, options: []) { [weak self] _, _ in
-      MainActor.assumeIsolated { self?.scrollMoved() }
+    let scrollView = webView.scrollView
+    barLink?.attach(scrollView)
+    linkedPan?.removeTarget(self, action: #selector(scrollPanChanged(_:)))
+    scrollView.panGestureRecognizer.addTarget(self, action: #selector(scrollPanChanged(_:)))
+    linkedPan = scrollView.panGestureRecognizer
+    scrollObservation = scrollView.observe(\.contentOffset, options: []) { [weak self] scrollView, _ in
+      MainActor.assumeIsolated { self?.scrollMoved(scrollView) }
     }
   }
 
-  private func scrollMoved() {
+  @objc private func scrollPanChanged(_ pan: UIPanGestureRecognizer) {
+    guard pan.state == .ended || pan.state == .cancelled, let view = pan.view else { return }
+    barLink?.released(velocity: pan.velocity(in: view).y)
+  }
+
+  private func scrollMoved(_ scrollView: UIScrollView) {
+    barLink?.scrolled(scrollView)
     lastScroll = CACurrentMediaTime()
     guard toneTask == nil else { return }
     toneTask = Task { @MainActor [weak self] in
@@ -311,11 +326,11 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
 
   private func sampleTone() {
     guard let webView, let page, webView.window != nil, !webView.isHidden, webView.url != nil,
-          webView.bounds.height > BrowseLayout.barHeight * 3, swipe == nil else { return }
+          webView.bounds.height > bottomInset * 3, swipe == nil else { return }
     let id = page.id
     let bounds = webView.bounds
     let top = webView.safeAreaInsets.top + 1
-    let bottom = bounds.height - BrowseLayout.barHeight - ToneSampler.bandHeight - 2
+    let bottom = bounds.height - max(bottomInset, BrowseLayout.barBand) - ToneSampler.bandHeight - 2
     Task { @MainActor [weak self, weak webView] in
       guard let webView else { return }
       async let topImage = Self.snapshot(of: webView, in: CGRect(x: 0, y: top, width: bounds.width, height: ToneSampler.bandHeight))

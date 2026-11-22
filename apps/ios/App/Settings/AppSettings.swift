@@ -47,7 +47,7 @@ final class AppSettings {
 
   init(defaults: UserDefaults, finishedOnboarding: Bool? = nil) {
     self.defaults = defaults
-    collapsesBottomBar = defaults.object(forKey: Key.collapsesBottomBar) as? Bool ?? false
+    collapsesBottomBar = defaults.object(forKey: Key.collapsesBottomBar) as? Bool ?? true
     autoOpensKeyboard = defaults.object(forKey: Key.autoOpensKeyboard) as? Bool ?? true
     hasFinishedOnboarding = finishedOnboarding ?? defaults.bool(forKey: Key.finishedOnboarding)
     colorChoice = defaults.string(forKey: Key.colorChoice)

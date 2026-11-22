@@ -807,21 +807,6 @@ final class TabPagerPanRecognizer: UIPanGestureRecognizer {
   }
 }
 
-struct TabPagerPan: UIGestureRecognizerRepresentable {
-  let pager: TabPager
-
-  func makeUIGestureRecognizer(context: Context) -> TabPagerPanRecognizer {
-    let recognizer = TabPagerPanRecognizer()
-    recognizer.maximumNumberOfTouches = 1
-    recognizer.addTarget(pager, action: #selector(TabPager.panned(_:)))
-    recognizer.onTouchDown = { [weak pager] in pager?.touchDown() }
-    recognizer.onTouchEnded = { [weak pager] in pager?.touchEnded() }
-    return recognizer
-  }
-
-  func handleUIGestureRecognizerAction(_ recognizer: TabPagerPanRecognizer, context: Context) {}
-}
-
 struct TabPagerStageHost: UIViewRepresentable {
   let pager: TabPager
   let app: AppModel
