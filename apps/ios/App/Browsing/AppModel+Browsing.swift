@@ -20,10 +20,17 @@ extension AppModel {
 
   func announceDownload(_ outcome: DownloadOutcome) {
     switch outcome {
+    case .finished(let file) where VideoSaving.isVideo(file):
+      toasts.show(.downloaded(file.lastPathComponent) { [weak self] in self?.browse.finishedVideo = file })
     case .finished(let file):
       toasts.show(.downloaded(file.lastPathComponent) { [weak self] in self?.web.shareRequest = file })
     case .failed(let fileName):
       toasts.show(.downloadFailed(fileName))
+    case .videoFailed(let fileName, let message):
+      toasts.show(Toast(String(localized: "Couldn’t Download \(fileName)"), symbol: "exclamationmark.triangle.fill", duration: .seconds(3.2)) { [weak self] in
+        self?.sheet = .downloads
+      })
+      AccessibilityNotification.Announcement(message).post()
     }
   }
 

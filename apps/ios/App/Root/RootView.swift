@@ -50,6 +50,17 @@ struct RootView: View {
       case .downloads: DownloadsView()
       }
     }
+    .sheet(item: $browse.videoChoices) { choices in
+      VideoPickerSheet(choices: choices)
+    }
+    .alert(browse.videoNotice?.title ?? "", isPresented: Binding(get: { browse.videoNotice != nil }, set: { if !$0 { browse.videoNotice = nil } }), presenting: browse.videoNotice) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { notice in
+      Text(notice.message)
+    }
+    .confirmationDialog(browse.finishedVideo?.lastPathComponent ?? "", isPresented: Binding(get: { browse.finishedVideo != nil }, set: { if !$0 { browse.finishedVideo = nil } }), titleVisibility: .visible, presenting: browse.finishedVideo) { file in
+      VideoFileActions(file: file)
+    }
     .fullScreenCover(isPresented: $browse.isVoicePresented) {
       VoiceSearchView()
     }

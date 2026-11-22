@@ -9,6 +9,8 @@ extension AppModel {
     sync.source = tabs
     web.omnibox = omnibox
     web.downloads.onOutcome = { [weak self] outcome in self?.announceDownload(outcome) }
+    downloadKeeper.manager = web.downloads
+    connectVideoDownloads()
     tabs.onLocalChange = { [weak self] in self?.sync.localDidChange() }
     web.openExternalURL = { url in UIApplication.shared.open(url) }
     web.canMakeWebViews = { PageWindows.exist }

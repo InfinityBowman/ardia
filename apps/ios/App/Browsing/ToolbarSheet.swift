@@ -46,6 +46,7 @@ struct ToolbarSheet: View {
             }
           }
           PageMenuGroup {
+            PageMenuRow("Download Video", enabled: isWebPage && page?.isLive == true) { close(then: .downloadVideo) }
             PageMenuRow("Site Settings") { close(then: .siteSettings) }
           }
           if let page {

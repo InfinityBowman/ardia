@@ -6,6 +6,7 @@ enum PageMenuFollowUp: Equatable {
   case print
   case sheet(AppModel.Sheet)
   case siteSettings
+  case downloadVideo
 }
 
 extension AppModel {
@@ -20,6 +21,8 @@ extension AppModel {
     case .siteSettings:
       settings.pendingRoute = .siteSettings
       sheet = .settings
+    case .downloadVideo:
+      downloadVideo(from: tabID)
     }
   }
 

@@ -57,12 +57,18 @@ struct DownloadsList: View {
   @Environment(AppModel.self) private var app
   @State private var previewing: URL?
 
+  private var transfers: [DownloadTransfer] { app.web.downloads.transfers }
+
   var body: some View {
     Group {
-      if model.hasLoaded, model.files.isEmpty {
+      if model.hasLoaded, model.files.isEmpty, transfers.isEmpty {
         ContentUnavailableView("No Downloads", systemImage: "arrow.down.circle", description: Text("Files you download show up here."))
       } else {
         LibraryList {
+          ForEach(transfers) { transfer in
+            TransferRow(transfer: transfer)
+              .libraryRowChrome()
+          }
           ForEach(model.files) { file in
             Button {
               previewing = file.url
@@ -79,7 +85,11 @@ struct DownloadsList: View {
                 .tint(Palette.formAccent)
             }
             .contextMenu {
-              ShareLink(item: file.url)
+              if VideoSaving.isVideo(file.url) {
+                VideoFileActions(file: file.url)
+              } else {
+                ShareLink(item: file.url)
+              }
               Button("Delete", systemImage: "trash", role: .destructive) { model.delete(file) }
             }
           }
@@ -89,6 +99,136 @@ struct DownloadsList: View {
     .quickLookPreview($previewing, in: model.files.map(\.url))
     .task { model.reload(from: app.web.downloads.directory) }
     .refreshable { model.reload(from: app.web.downloads.directory) }
+    .onChange(of: app.web.downloads.finishedCount) { _, _ in
+      withAnimation(Motion.snappy) { model.reload(from: app.web.downloads.directory) }
+    }
+  }
+}
+
+struct VideoFileActions: View {
+  let file: URL
+
+  @Environment(AppModel.self) private var app
+
+  var body: some View {
+    if VideoSaving.canSaveToPhotos(file) {
+      Button("Save to Photos", systemImage: "photo.on.rectangle.angled") { app.saveVideoToPhotos(file) }
+    }
+    Button("Save to Files", systemImage: "folder") { VideoSaving.saveToFiles(file) }
+    ShareLink(item: file) { Label("Share…", systemImage: "square.and.arrow.up") }
+  }
+}
+
+private struct TransferRow: View {
+  let transfer: DownloadTransfer
+
+  @Environment(AppModel.self) private var app
+
+  private var failure: String? {
+    if case .failed(let message) = transfer.state { return message }
+    return nil
+  }
+
+  var body: some View {
+    HStack(alignment: .center, spacing: Spacing.small) {
+      Image(systemName: failure == nil ? (transfer.isVideo ? "film" : "arrow.down.circle") : "exclamationmark.triangle.fill")
+        .font(.system(size: SiteRow.libraryFavicon * 0.8))
+        .foregroundStyle(failure == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
+        .frame(width: SiteRow.libraryFavicon, height: SiteRow.libraryFavicon)
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 4) {
+        Text(verbatim: transfer.fileName)
+          .lineLimit(1)
+          .truncationMode(.middle)
+          .foregroundStyle(.primary)
+        if let failure {
+          Text(failure)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+          if let fraction = transfer.fraction, transfer.stage != .preparing {
+            ProgressView(value: fraction)
+              .tint(Palette.formAccent)
+          } else {
+            ProgressView(value: 0)
+              .tint(Palette.formAccent)
+              .opacity(0.5)
+          }
+          Text(status)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .contentTransition(.numericText())
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      if failure == nil {
+        Button {
+          app.web.downloads.cancel(transfer)
+        } label: {
+          Image(systemName: "xmark.circle.fill")
+            .font(.title2)
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(.secondary)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Cancel Download")
+      } else {
+        HStack(spacing: 0) {
+          if transfer.canRetry {
+            Button {
+              app.web.downloads.retry(transfer)
+            } label: {
+              Image(systemName: "arrow.clockwise.circle.fill")
+                .font(.title2)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(Palette.formAccent)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Try Again")
+          }
+          Button {
+            withAnimation(Motion.snappy) { app.web.downloads.dismiss(transfer) }
+          } label: {
+            Image(systemName: "xmark.circle.fill")
+              .font(.title2)
+              .symbolRenderingMode(.hierarchical)
+              .foregroundStyle(.secondary)
+              .frame(minWidth: 44, minHeight: 44)
+              .contentShape(.rect)
+          }
+          .buttonStyle(.plain)
+          .accessibilityLabel("Remove")
+        }
+      }
+    }
+    .padding(.vertical, Spacing.small)
+    .accessibilityElement(children: .contain)
+    .accessibilityValue(failure ?? status)
+  }
+
+  private var status: String {
+    let received = transfer.receivedBytes.formatted(.byteCount(style: .file))
+    switch transfer.stage {
+    case .preparing:
+      return String(localized: "Finding the best quality…")
+    case .assembling:
+      return String(localized: "Putting the video together…")
+    case .downloading:
+      if let expected = transfer.expectedBytes, expected > 0 {
+        return String(localized: "\(received) of \(expected.formatted(.byteCount(style: .file)))")
+      }
+      if let fraction = transfer.fraction {
+        return transfer.receivedBytes > 0 ? "\(fraction.formatted(.percent.precision(.fractionLength(0)))) · \(received)" : fraction.formatted(.percent.precision(.fractionLength(0)))
+      }
+      return received
+    }
   }
 }
 

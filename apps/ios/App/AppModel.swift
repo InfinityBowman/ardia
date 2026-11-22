@@ -41,6 +41,7 @@ final class AppModel {
   let settings = AppSettings.launch()
   let deck: TabDeckModel
   let defaultBrowser: DefaultBrowserStatus
+  let downloadKeeper = DownloadKeeper()
 
   var surface: Surface = .search
   var sheet: Sheet?
