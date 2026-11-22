@@ -62,7 +62,34 @@ struct SearchHomeView: View {
     app.browse.presentSearch(from: .home, incognitoOnCancel: app.isIncognito)
   }
 
+  @ViewBuilder
   private func bar(_ geometry: TabsDeckGeometry) -> some View {
+    if screenLayout.column == nil {
+      StartPageBar(
+        safeBottom: geometry.safeBottom,
+        sideInset: geometry.safeSide,
+        plus: plusActions,
+        tabs: { app.showTabSwitcher() },
+        settings: { app.sheet = .settings }
+      )
+      .frame(width: geometry.container.width, height: geometry.container.height, alignment: .bottom)
+    } else {
+      columnBar(geometry)
+    }
+  }
+
+  private var plusActions: PlusActions {
+    PlusActions(
+      isIncognito: app.isIncognito,
+      canReopen: app.tabs.canReopenClosed,
+      newTab: { app.newTab() },
+      newRegularTab: { app.newRegularTab() },
+      newIncognitoTab: { app.newIncognitoTab() },
+      reopen: { app.reopenLastClosed() }
+    )
+  }
+
+  private func columnBar(_ geometry: TabsDeckGeometry) -> some View {
     StartBar(
       geometry: geometry,
       plus: PlusActions(
@@ -110,9 +137,10 @@ struct StartSpaces: View {
           .position(x: geometry.container.width / 2, y: screenLayout.column == nil ? geometry.barCenterY - TabsLayout.pageDotsAboveBar : geometry.barCenterY)
       } else if let space = spaces.first {
         StartSpacePage(geometry: geometry, space: space, spaces: spaces)
-      } else if app.sync.phase == .off {
-        SyncInvitation { app.sheet = .syncSetup }
-          .position(x: geometry.container.width / 2, y: geometry.container.height * TabsLayout.startSwitcherRatio)
+      } else {
+        StartWelcome()
+          .frame(width: geometry.container.width - 2 * (geometry.safeSide + StartLayout.side))
+          .position(x: geometry.container.width / 2, y: geometry.container.height * StartLayout.centerShare)
       }
     }
     .frame(width: geometry.container.width, height: geometry.container.height)
@@ -151,22 +179,151 @@ struct StartSpacePage: View {
   }
 }
 
-private struct SyncInvitation: View {
-  let action: () -> Void
+struct StartWelcome: View {
+  @Environment(AppModel.self) private var app
+  @Environment(\.openURL) private var openURL
 
   var body: some View {
-    Button(action: action) {
-      Text("Sync With Your Mac")
-        .font(.headline)
-        .foregroundStyle(TabsPalette.headerText)
-        .padding(.horizontal, 20)
-        .frame(minHeight: TabsLayout.glassCircle)
-        .contentShape(.capsule)
-        .chromeSurface(in: .capsule)
+    VStack(spacing: 0) {
+      mark
+        .padding(.bottom, StartLayout.markGap)
+      Text(title)
+        .font(.body.weight(.semibold))
+        .foregroundStyle(StartPalette.title)
+        .multilineTextAlignment(.center)
+        .padding(.bottom, StartLayout.titleGap)
+      Text(detail)
+        .font(.subheadline)
+        .foregroundStyle(StartPalette.detail)
+        .multilineTextAlignment(.center)
+        .padding(.bottom, action == nil ? 0 : StartLayout.buttonGap)
+      if let action {
+        Button(action: action.run) {
+          Text(action.title)
+            .font(.body.weight(.medium))
+            .foregroundStyle(StartPalette.title)
+            .padding(.horizontal, StartLayout.buttonPadding)
+            .frame(minHeight: StartLayout.buttonHeight)
+            .background(StartPalette.button, in: .rect(cornerRadius: StartLayout.buttonRadius, style: .continuous))
+            .contentShape(.rect)
+        }
+        .buttonStyle(PageMenuPressStyle())
+      }
     }
-    .buttonStyle(.plain)
-    .accessibilityHint("Brings your Mac’s spaces, tabs and pinned sites.")
   }
+
+  @ViewBuilder
+  private var mark: some View {
+    if app.isIncognito {
+      Image(systemName: "eyeglasses")
+        .font(.system(size: StartLayout.eyes, weight: .semibold))
+        .foregroundStyle(.white.opacity(0.85))
+        .frame(width: StartLayout.mark, height: StartLayout.mark)
+        .accessibilityHidden(true)
+    } else {
+      AppIconPreview(side: StartLayout.mark)
+        .shadow(color: .black.opacity(0.35), radius: 16, y: 6)
+    }
+  }
+
+  private var title: LocalizedStringKey {
+    if app.isIncognito { return "You’re browsing Incognito" }
+    if !app.defaultBrowser.isDefault { return "Want links to open in Ardia?" }
+    if app.sync.phase == .off { return "Bring your Mac’s tabs along" }
+    return "No open tabs"
+  }
+
+  private var detail: LocalizedStringKey {
+    if app.isIncognito { return "Incognito tabs aren’t saved to your history or your Archive." }
+    if !app.defaultBrowser.isDefault { return "Make Ardia your default browser and every link you tap opens here." }
+    if app.sync.phase == .off { return "Sync with Ardia on your Mac to see its spaces and pinned sites here." }
+    return "Tap + to search or type an address."
+  }
+
+  private struct StartAction {
+    let title: LocalizedStringKey
+    let run: () -> Void
+  }
+
+  private var action: StartAction? {
+    if app.isIncognito { return nil }
+    if !app.defaultBrowser.isDefault {
+      return StartAction(title: "Set Ardia as Default Browser") {
+        app.defaultBrowser.willOpenSystemSettings()
+        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+      }
+    }
+    if app.sync.phase == .off {
+      return StartAction(title: "Sync With Your Mac") { app.sheet = .syncSetup }
+    }
+    return nil
+  }
+}
+
+struct StartPageBar: View {
+  let safeBottom: CGFloat
+  var sideInset: CGFloat = 0
+  let plus: PlusActions
+  let tabs: () -> Void
+  let settings: () -> Void
+
+  var body: some View {
+    ZStack {
+      BarTabsStackButton(actions: BarActions(
+        onTabs: tabs,
+        onAddress: {},
+        onPlus: plus.newTab,
+        onMore: settings,
+        onExpand: {},
+        onStep: { _ in },
+        onSelectTab: { _ in },
+        onCloseTab: {}
+      ))
+      .frame(maxWidth: .infinity, alignment: .leading)
+      BarPlusCapsule(action: plus.newTab)
+        .contextMenu {
+          if plus.isIncognito {
+            Button("New Tab", action: plus.newRegularTab)
+            Button("New Incognito Tab", action: plus.newTab)
+          } else {
+            Button("New Incognito Tab", action: plus.newIncognitoTab)
+          }
+          if plus.canReopen {
+            Button("Reopen Closed Tab", action: plus.reopen)
+          }
+        }
+        .accessibilityLabel(plus.isIncognito ? "New Incognito Tab" : "New Tab")
+      BarCircleButton(symbol: "gearshape", label: "Settings", action: settings)
+        .padding(.trailing, BrowseLayout.barSide - (BrowseLayout.hitTarget - BrowseLayout.barCircle) / 2)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+    .frame(height: BrowseLayout.barControl)
+    .padding(.horizontal, sideInset)
+    .padding(.bottom, BrowseLayout.barLine(safeBottom: safeBottom) - BrowseLayout.barControl / 2)
+    .frame(maxWidth: .infinity)
+    .background(alignment: .bottom) {
+      BarBand(height: BrowseLayout.barHeight(safeBottom: safeBottom))
+    }
+  }
+}
+
+enum StartLayout {
+  static let mark: CGFloat = 128
+  static let eyes: CGFloat = 64
+  static let markGap: CGFloat = 36
+  static let titleGap: CGFloat = 8
+  static let buttonGap: CGFloat = 20
+  static let buttonHeight: CGFloat = 34
+  static let buttonRadius: CGFloat = 10
+  static let buttonPadding: CGFloat = 12
+  static let side: CGFloat = 40
+  static let centerShare: CGFloat = 0.6
+}
+
+enum StartPalette {
+  static let title = Color.primary
+  static let detail = Color.adaptive(light: .black.opacity(0.5), dark: .white.opacity(0.45))
+  static let button = Color.adaptive(light: .black.opacity(0.07), dark: .white.opacity(0.14))
 }
 
 #Preview("Start") {

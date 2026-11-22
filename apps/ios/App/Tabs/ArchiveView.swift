@@ -10,19 +10,24 @@ struct ArchiveView: View {
   @State private var restoreTicks = 0
   @State private var deleteAllTicks = 0
   @State private var copyTicks = 0
+  @State private var selection = Set<UUID>()
+  @State private var editMode = EditMode.inactive
 
   var body: some View {
     NavigationStack {
       content
-        .lookBackdrop()
+        .background(ArchivePalette.sheet.ignoresSafeArea())
         .navigationTitle("Archive")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search Archive")
+        .modifier(ArchiveSearch(query: $query, isShown: !app.tabs.archive.isEmpty))
+        .environment(\.editMode, $editMode)
         .toolbar {
-          ToolbarItem(placement: .cancellationAction) {
-            Button("Done") { dismiss() }
+          ToolbarItem(placement: .topBarLeading) {
+            if !app.tabs.archive.isEmpty { editButton }
           }
-          ToolbarItem(placement: .primaryAction) { optionsMenu }
+          ToolbarItem(placement: .topBarTrailing) { optionsMenu }
+          ToolbarSpacer(.fixed, placement: .topBarTrailing)
+          ToolbarItem(placement: .topBarTrailing) { doneButton }
         }
         .confirmationDialog("Delete All Archived Tabs?", isPresented: $isConfirmingClear, titleVisibility: .visible) {
           Button("Delete All", role: .destructive) {
@@ -48,23 +53,69 @@ struct ArchiveView: View {
       if results.isEmpty {
         ContentUnavailableView.search(text: trimmedQuery)
       } else {
-        List {
-          ForEach(results, id: \.id) { tab in row(tab) }
+        List(selection: $selection) {
+          Section {
+            ForEach(results, id: \.id) { tab in row(tab) }
+          }
+          .listRowBackground(ArchivePalette.card)
         }
-        .listStyle(.plain)
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
       }
     } else {
-      List {
+      List(selection: $selection) {
         ForEach(days) { day in
           Section {
             ForEach(day.tabs, id: \.id) { tab in row(tab) }
           } header: {
             Text(ArchiveDayTitle.title(for: day.day))
+              .font(.headline)
+              .foregroundStyle(.secondary)
+              .textCase(nil)
           }
+          .listRowBackground(ArchivePalette.card)
         }
       }
-      .listStyle(.plain)
+      .listStyle(.insetGrouped)
+      .scrollContentBackground(.hidden)
+      .safeAreaInset(edge: .bottom) {
+        if editMode.isEditing, !selection.isEmpty {
+          Button("Delete \(selection.count)", role: .destructive) {
+            app.tabs.delete(selection)
+            selection = []
+            editMode = .inactive
+          }
+          .font(.body.weight(.semibold))
+          .buttonStyle(.borderedProminent)
+          .tint(.red)
+          .padding(.bottom, Spacing.small)
+        }
+      }
     }
+  }
+
+  private var editButton: some View {
+    Button(editMode.isEditing ? "Done" : "Edit") {
+      withAnimation {
+        editMode = editMode.isEditing ? .inactive : .active
+        if !editMode.isEditing { selection = [] }
+      }
+    }
+    .font(.body.weight(.medium))
+  }
+
+  private var doneButton: some View {
+    Button {
+      dismiss()
+    } label: {
+      Image(systemName: "checkmark")
+        .font(.system(size: 20, weight: .semibold))
+        .foregroundStyle(.white)
+        .frame(width: ArchiveLayout.close, height: ArchiveLayout.close)
+        .background(ArchivePalette.close, in: .circle)
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Done")
   }
 
   private var trimmedQuery: String {
@@ -91,12 +142,14 @@ struct ArchiveView: View {
 
   private func row(_ tab: BrowserTab) -> some View {
     Button {
+      guard !editMode.isEditing else { return }
       restoreTicks += 1
       app.restoreArchived(tab.id)
     } label: {
       ArchiveRow(tab: tab)
     }
     .buttonStyle(.plain)
+    .listRowInsets(ArchiveLayout.rowInsets)
     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
       Button("Delete", systemImage: "trash", role: .destructive) { app.tabs.delete([tab.id]) }
     }
@@ -131,13 +184,12 @@ struct ArchiveRow: View {
           .font(.body)
           .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
         Text(facts)
-          .font(.subheadline)
+          .font(.footnote)
           .foregroundStyle(.secondary)
           .lineLimit(1)
       }
       Spacer(minLength: 0)
     }
-    .padding(.vertical, 4)
     .contentShape(.rect)
     .accessibilityElement(children: .combine)
   }
@@ -165,18 +217,42 @@ enum ArchiveDayTitle {
 
 struct ArchiveEmptyState: View {
   var body: some View {
-    ContentUnavailableView {
-      Label {
-        Text("No Archived Tabs")
-      } icon: {
-        Image(systemName: "archivebox.fill")
-          .foregroundStyle(.white)
-          .font(.system(size: 30, weight: .semibold))
-          .frame(width: 64, height: 64)
-          .background(TabsPalette.archiveTile.gradient, in: .rect(cornerRadius: 16, style: .continuous))
-      }
-    } description: {
-      Text("Closed and inactive tabs show up here.")
+    VStack(spacing: Spacing.small) {
+      Text("Nothing here yet!")
+        .font(.title2.weight(.bold))
+        .foregroundStyle(.primary)
+      Text("Closed and auto-archived tabs will appear here. You can change how soon inactive tabs are archived with the ••• button.")
+        .font(.body)
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+    }
+    .padding(.horizontal, ArchiveLayout.emptyInset)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .accessibilityElement(children: .combine)
+  }
+}
+
+enum ArchivePalette {
+  static let sheet = Color.adaptive(light: Color(.systemGroupedBackground), dark: Color(hex: 0x1C1C1D))
+  static let card = Color.adaptive(light: Color(.secondarySystemGroupedBackground), dark: Color(hex: 0x2C2C2E))
+  static let close = Color(hex: 0x7B8DF7)
+}
+
+enum ArchiveLayout {
+  static let close: CGFloat = 44
+  static let emptyInset: CGFloat = 40
+  static let rowInsets = EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16)
+}
+
+private struct ArchiveSearch: ViewModifier {
+  @Binding var query: String
+  let isShown: Bool
+
+  func body(content: Content) -> some View {
+    if isShown {
+      content.searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search")
+    } else {
+      content
     }
   }
 }

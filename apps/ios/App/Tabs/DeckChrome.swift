@@ -97,27 +97,26 @@ struct DeckEmptyState: View {
   let openArchive: () -> Void
 
   var body: some View {
-    VStack(spacing: 6) {
-      Text(isSearching ? "No Matching Tabs" : "No Open Tabs")
-        .font(.title3.weight(.semibold))
-        .foregroundStyle(TabsPalette.headerText)
-      if !isSearching {
-        Text("Tabs you open appear here. Inactive tabs move to the Archive.")
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
-          .multilineTextAlignment(.center)
-        if showsArchive {
-          Button("Open Archive", action: openArchive)
-            .font(.subheadline.weight(.semibold))
-            .tint(Palette.formAccent)
-            .padding(.top, 6)
-            .frame(minHeight: 44)
+    Group {
+      if isSearching {
+        Text("No Matching Tabs")
+          .font(.title3.weight(.semibold))
+          .foregroundStyle(TabsPalette.headerText)
+          .position(x: geometry.container.width / 2, y: geometry.cardCenterY)
+      } else {
+        VStack(spacing: StartLayout.buttonGap) {
+          StartWelcome()
+          if showsArchive {
+            Button("Open Archive", action: openArchive)
+              .font(.subheadline.weight(.semibold))
+              .foregroundStyle(StartPalette.detail)
+              .frame(minHeight: 44)
+          }
         }
+        .frame(width: geometry.container.width - 2 * (geometry.safeSide + StartLayout.side))
+        .position(x: geometry.container.width / 2, y: geometry.container.height * StartLayout.centerShare)
       }
     }
-    .frame(maxWidth: 300)
-    .padding(.horizontal, Spacing.large)
-    .position(x: geometry.container.width / 2, y: geometry.cardCenterY)
   }
 }
 

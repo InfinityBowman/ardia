@@ -145,6 +145,27 @@ struct BarPageMenuButton: View {
   }
 }
 
+struct BarCircleButton: View {
+  let symbol: String
+  let label: LocalizedStringKey
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      Image(systemName: symbol)
+        .font(.system(size: BrowseLayout.barChevronGlyph, weight: .semibold))
+        .foregroundStyle(BrowsePalette.barGlyph)
+        .frame(width: BrowseLayout.barCircle, height: BrowseLayout.barCircle)
+        .background(BrowsePalette.barCircleFill, in: .circle)
+        .overlay { Circle().strokeBorder(BrowsePalette.barControlEdge, lineWidth: 0.5) }
+        .frame(width: BrowseLayout.hitTarget, height: BrowseLayout.barControl)
+        .contentShape(.rect)
+    }
+    .buttonStyle(BarPressStyle())
+    .accessibilityLabel(label)
+  }
+}
+
 struct BarPressStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label

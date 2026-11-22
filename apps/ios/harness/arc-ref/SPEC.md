@@ -631,3 +631,23 @@ iPhone's bar line (§6.1).
   this Mac, too slow to land mid-landing) with the tabs button 50, 150 and 300 ms into the landing and
   500 ms after it, and fails if any switcher shows the selected tab anywhere but rightmost
   (`deck.misordered`). Before the fix: 6 of 8 misordered; after: 0.
+
+### 6.8 Start page, Archive and Incognito (§1.5, §1.6; `14-`, `20-`, `22-`; composite `runs/restyle2/B3-start-archive-incognito-compare.png`)
+
+- **No tabs** (Arc `22-`): the app mark centred at about half height, "Want links to open in Arc?"
+  (17 pt semibold), a grey two-line subtitle and a 34 pt "Set Arc as Default Browser" button (radius ≈ 10,
+  white ≈ 0.14), over the dark backdrop, with the page bar's three controls. Ardia shows the same block
+  (app icon 128 pt, "Want links to open in Ardia?", the button opens Settings) on the start page when
+  there are no synced spaces, and in the empty switcher. Once Ardia is the default browser it offers Sync
+  with your Mac instead, and with nothing left to offer, just "No open tabs". The switcher keeps an
+  "Open Archive" link under it (Arc has none). The start page's bar is now the page bar: band, tabs
+  stack, + capsule, and a gear circle where the page has ^.
+- **Archive** (Arc `14-`, `20-`): a `#1c1c1d` sheet, "Archive" centred, a violet (`#7b8df7`) ✓ circle at
+  the top right and **Edit** at the top left, a search capsule, day headers ("Today", grey, not
+  uppercase), and inset cards (`#2c2c2e`) of favicon, title and grey address rows, ≈ 50 pt each. Empty:
+  "Nothing here yet!" (bold) over a grey line. Ardia keeps its ••• menu (auto-archive interval, Delete
+  All) beside the ✓, and Edit selects rows for a Delete button.
+- **Incognito**: Arc Search 1.49 has none (§1.6), so Ardia's keeps the same layouts in dark: the empty
+  switcher and start page show the eyes mark with "You're browsing Incognito" and a line on what isn't
+  saved; the search panel keeps its Incognito label and "You're browsing Incognito" while the field is
+  empty.
