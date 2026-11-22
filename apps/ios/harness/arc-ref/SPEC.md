@@ -19,9 +19,15 @@ downscaled stills here are in `shots/`.
 >      bottom-relative and centre-relative numbers.
 > - The keyboard is the iPad's full-width floating keyboard, so **nothing here says how the search
 >   panel rides an iPhone keyboard.**
-> - The session ended early: CoreDevice stopped answering (`devicectl` lock-state and display queries
->   time out) while session 3 started. Bar swipes, swipe-up, flick-to-close, search typing and dismiss,
->   menu timing, scroll video and edge-swipe were **not captured**. See "Not measured".
+> - The first session (s1–s2) ended when CoreDevice stopped answering. The gestures it missed were
+>   captured in a second session at ~20:45–21:00 the same day (s3–s6, §2.4–2.8), after a CoreDevice
+>   restart. Between sessions Arc relaunched, and the window came back at 401 × 881 pt, then
+>   401 × 878 pt at a 1–2 pt different y. Every clip was cropped to the window bounds measured at that
+>   moment (§5).
+> - Gestures that start in the window's bottom 30 pt, or near its bottom-left corner, are taken by
+>   iPadOS as a window resize and never reach Arc (this happened twice, `full_58.png` and
+>   `full_66.png`; the window was restored after each). On an iPhone that band belongs to the
+>   home-indicator gesture instead, so neither tells you what Arc does there.
 
 Units are points (pt); the device is 2×, so 1 pt = 2 px in the raw PNGs. Coordinates are
 **window-local**: x from the window's left edge, y from its top. The window is 401 × 878 pt.
@@ -55,7 +61,8 @@ It reads as a translucent material, probably blurred. A uniform page can't show 
 
 It is a **horizontal, overlapping card deck**, not a grid. Order is by recency: the newest tab is
 rightmost and sits **on top**, and older cards stack under it to the left. One finger scrolls it
-sideways.
+sideways. Picking a card in the switcher moves that tab to the newest position. Swiping the bar to
+another tab does not (§2.4).
 
 | Item | Measured | Source |
 |---|---|---|
@@ -85,7 +92,14 @@ new-tab page.
 | Suggestion rows | Magnifier at x ≈ 29, text at x 49, ≈ 17 pt; rows ≈ 56 pt apart (centres 640, 696); "Browse for Me" pill right-aligned, x 284–384, ≈ 30 pt tall |
 | Keyboard | The iPad's floating full-width keyboard, top at screen y ≈ 845 (window y ≈ 744). It covers the window's bottom; the panel does not move above it here. |
 
-The panel while typing wasn't captured (the session ended first).
+**While typing** (`17-search-typing-pen.png`): the placeholder becomes the typed text with a clear (×)
+button at x ≈ 357 in place of the mic and eyes icons. Suggestion rows ("pen", "penn station", …) list
+under the field, each with a magnifier and a "Browse for Me" pill; the typed prefix is bright, the
+completion dimmer. The first keystroke shows the rows with a fade of ≈ 200 ms (10 frames); each later
+keystroke updates the field and the rows in **one frame** (s4 type_p/e/n). On the iPad keyboard the
+Return key turns blue (→) as soon as there is text.
+
+**Reopening** the panel restores the last typed text, fully selected (`full_63.png`).
 
 ### 1.4 Page menu (^ button) (`10-page-menu.png`, `z-menu-grid.png`)
 
@@ -96,7 +110,7 @@ The panel while typing wasn't captured (the session ended first).
 | Address row | Capsule 369 × 47.5 (y 495–542.5): back `<` (x ≈ 42) and forward `>` (x ≈ 81) on the left, domain `en.wikipedia.org` centred (~17 pt, semibold), link (x ≈ 321) and reload (x ≈ 359) on the right; fill `#d6d7d9` |
 | Action tiles | 4 tiles, **80 × 80 pt**, radius ≈ 20, x 16 / 113 / 209 / 305 (gap ≈ 16.5), y 559.5–639.5; labels below (Find on Page, Summarize, Pin, Share), ≈ 14 pt grey, baseline ≈ 660; fill `#d2d3d4` |
 | List rows | Display Options (›) y 678–725.5; Site Settings y 742–789.5; "Arc scrubbed 1 tracker / Problems? Tap to restore original page" y 805–860; each 369 wide, ≈ 47.5 tall (the tracker row is 2 lines), radius ≈ 16, gap ≈ 17 |
-| Dismiss | Tapping the dimmed page closes it (seen; not timed) |
+| Dismiss | Tapping the dimmed page, or swiping the sheet down, closes it (timed in §2.6) |
 
 ### 1.5 Settings, Archive and auto-archive (`11-…` to `14-…`)
 
@@ -110,7 +124,16 @@ The panel while typing wasn't captured (the session ended first).
   30 days** (`13-archive-interval-picker.png`). This is the only tab-lifetime setting.
 - **Archive** sheet (`#1c1c1d`, a violet `#7b8df7` ✓ close button): empty state "Nothing here yet! /
   Manually closed and auto-archived tabs will appear here." Closing a tab archives it rather than
-  deleting it.
+  deleting it. With items (`20-archive-with-closed-tabs.png`): an **Edit** button top left, a search
+  field, then rows grouped by day ("Today"), each with a favicon, a title and a grey URL line, most
+  recently closed first.
+- **Gear** (`19-gear-settings.png`) opens this same Settings sheet.
+- **Monitor button** (switcher bar, left; `18-monitor-button-sync-sheet.png`): a full-height sheet
+  (top y ≈ 58, 16 pt above the window's ••• control) with a pale blue-white gradient (`#cad2e9` at the
+  top → `#eaf1fd`), a pink glow at the top right, the Arc logo, "Sync with Arc Desktop" in bold violet,
+  the subtitle "Search, browse, and pin to your Arc Spaces on the go.", and two full-width
+  (x 36–365, 329 pt) violet buttons (`#3139f6`), **Sign in with Arc** and **I don't have an account**.
+  A swipe down dismisses it. I tapped neither button.
 
 ### 1.6 Start page, Incognito
 
@@ -173,6 +196,123 @@ response ≈ 0.26 s, damping 1.0; the n−1 card flying out of the thumbnail: re
 | **Tabs tapped while a card is zooming open** (r3: 154 ms after the card tap, zoom ~86 % done; r5: 302 ms after, zoom finished) | Accepted at once. The page shrank straight back into the switcher, and the tab just opened became current (rightmost). Nothing waits for the zoom to finish. | Turnaround 156 ms (r3) and 153 ms (r5) after the tabs command, the same as from rest |
 | Hold a card 0.25 s in the switcher (r4) | Press feedback while held; the zoom starts ~1 frame after release | |
 
+### 2.4 Swiping the bottom bar between tabs (`s3`, `s3b`, `s6`; frames `v-bar-drag-200-follow-commit.jpg`, `v-bar-fast-100-commit.jpg`, `v-bar-left-at-newest-rubberband.jpg`)
+
+**Direction.** A finger moving **right** goes to the **older** neighbour in the deck: the page slides
+right and the older tab enters from the left. A finger moving left goes to the newer one. A bar swipe
+does **not** reorder the deck. The switcher afterwards still shows the newest tab on the right and
+puts the current (older) tab in the focus slot (`21-switcher-current-not-newest.png`).
+
+Each row is one gesture, all horizontal along the bar at window y ≈ 849:
+
+| Finger travel | Speed | Page followed the finger? | Result |
+|---|---|---|---|
+| 60, 100, 150 pt | 60–150 pt/s (1.0 s drags) | **No: not one pixel moved** | nothing |
+| 100 pt | ≈ 250 pt/s (0.4 s) | yes, from the first moved frame (48 pt page offset at release) | **switched** |
+| 150 pt | ≈ 250 pt/s (0.6 s) | yes | **switched** |
+| 180 pt | ≈ 180 pt/s (1.0 s) | yes | **switched** |
+| 200 pt | ≈ 167 pt/s (1.2 s) | yes, ≈ 0.9 : 1 (182 pt page for 200 pt finger) | **switched** |
+| 40 pt, 80 pt | 670–1300 pt/s (60 ms flicks) | no | nothing |
+| 120 pt | ≈ 2000 pt/s (60 ms flick) | — (too fast to see) | **switched** |
+| 200 pt | ≈ 1300 pt/s (0.15 s) | yes | **switched** (both directions) |
+| 200 pt left on the **newest** tab | ≈ 1300 pt/s | yes, with resistance: page reached 96 pt (≈ 0.5 : 1), an empty violet edge showed | **rubber-band**, sprang back |
+
+What this says:
+- **Start gate.** Below roughly **150–170 pt/s** the bar's pan never begins, so a slow drag does
+  nothing at all. A flick of 80 pt or less never begins either. Above the gate, the page tracks the
+  finger from the first frame.
+- **Commit.** Every drag that began tracking committed on release, from 48 pt of page offset up, so
+  the release threshold can't be bracketed from below. If there is one, it is ≤ ~50 pt at ≥ 250 pt/s.
+  I saw no tracked drag snap back except the rubber-band at the deck's end.
+- **Settle after release** (s3; page-edge tracking):
+
+| Case | 50 % | 90 % | 99 % | Settle | Curve |
+|---|---|---|---|---|---|
+| Commit after the slow 200 pt left drag (from 207 pt to 1 pt) | 68 ms | 171 ms | 222 ms | 253 ms | spring ζ ≈ 0.89, response ≈ 287 ms, no visible overshoot |
+| Commit after the fast 200 pt right swipe (new page edge 81 → 400) | 65 ms | 151 ms | 217 ms | 233 ms | ζ ≈ 0.95, response ≈ 261 ms |
+| Commit after the fast 200 pt left swipe (169 → 1 pt) | 38 ms | 122 ms | 171 ms | 188 ms | ζ ≈ 1.0, response ≈ 180 ms |
+| Rubber-band return at the newest tab (−96 → 0) | ≈ 56 ms | ≈ 125 ms | ≈ 200 ms | ≈ 233 ms | critically damped |
+
+Times run from the last frame before release. The release carries the finger's velocity (initial
+page speed 1250–3150 pt/s right after release). The bar icons don't move during the swipe; only the
+page does, and the tabs thumbnail updates when the swipe commits.
+
+### 2.5 Swiping up from the bar (`s4` up_slow_100_b, frames `v-swipe-up-bar-to-search.jpg`; `s5` up_from_thumb)
+
+- **From the bar background between the tabs button and + (window x ≈ 100), 100 pt up at
+  ≈ 100 pt/s:** the bar **follows the finger**. The band and the + capsule rise with it, and the
+  thumbnail and ^ fade out. On release the capsule morphs into the **search field** and the
+  search panel opens with the keyboard. **It opens search, not the switcher.**
+- **From the tabs thumbnail (x ≈ 62), 100 pt up in 0.6 s:** nothing happened.
+- No swipe-up gesture opened the switcher. The tabs button is the only route there I found.
+
+### 2.6 Search panel and page menu (`s4`)
+
+The page menu was tracked by template-matching its address row. The search panel was tracked by its
+field where possible; whole-window frame difference was used where noted.
+
+| Transition | Command → first frame (rig) | 50 % | 90 % | 99 % | Settle | Notes |
+|---|---|---|---|---|---|---|
+| **Page menu open** (tap ^): address row rises from the bar (y ≈ 832) to y 500 | 162–163 ms | 45–51 ms | **130–134 ms** | 233–248 ms | **≈ 315 ms** | Critically damped, ζ = 1.00, **response ≈ 220 ms**, no overshoot. The + capsule visibly morphs into the address row and the sheet grows out of the bar (`v-menu-open.jpg`). |
+| Page menu close, tap outside | 159 ms | — | **≈ 60 ms** (sheet collapses in ~4 frames) | | 318 ms for the whole window (dim fade) | much faster than the open |
+| Page menu close, swipe down (200 pt in 0.1 s) | 156 ms | | | | ≈ 235 ms | the sheet follows the finger ≈ 1 : 1 (30 pt/frame), then drops into the bar |
+| **Search open** (tap +) | 170–180 ms | 148–172 ms* | 279–305 ms* | | 413–455 ms* | *Whole-window frame difference, including the iPad keyboard sliding in. The field lands on a critically damped spring, response ≈ 175–190 ms. |
+| Search dismiss, tap outside | 171 ms | | field gone in **≈ 2 frames** | | 358 ms for the whole window (keyboard drop) | |
+| Search dismiss, fast swipe down (150 pt in 0.1 s) | 161 ms | | | | 437 ms whole window | the field follows the finger ≈ 0.8–1 : 1 (≈ 20 pt/frame), then dismisses |
+| Search dismiss, slow pull down (200 pt in 0.8 s) | 243 ms | | | | ≈ 1.35 s including the drag | dismisses on release |
+| Keystroke → field and rows updated | — | | | | 1 frame | the first keystroke fades the rows in over ≈ 200 ms |
+| Monitor sheet open | 219 ms | 203 ms* | 387 ms* | | 540 ms* | *whole-window difference |
+| Monitor sheet swipe-down dismiss | 150 ms | 218 ms* | 301 ms* | | 403 ms* | |
+| Settings open (gear) / Done | 247 / 113 ms | 102 / 160 ms* | 389 / 261 ms* | | 574 / 445 ms* | |
+| Archive open / close | 145 / 179 ms | 185 / 185 ms* | 470 / 335 ms* | | 586 / 554 ms* | |
+
+### 2.7 Closing a card in the switcher (`s5`; frames `v-card-flick-close.jpg`)
+
+A vertical drag on the focused (n−1) card:
+
+| Gesture | Result | Measured |
+|---|---|---|
+| 100 pt up at 100 pt/s, released | **snaps back** | Follows the finger ≈ 1 : 1 (90 pt for 100), **straight up**, with no change to the card's width (x stays 84–307), no rotation and no fade. Return: 90 % ≈ 125 ms, 99 % ≈ 200 ms, settle ≈ 230 ms, critically damped, no overshoot. |
+| 130 pt up at 130 pt/s | **closes** | |
+| 170 pt up at 170 pt/s; 250 pt up at 210 pt/s | **closes** | |
+| 200 pt up in 80 ms (flick) | **closes** | Card moves ≈ 30 pt/frame during the flick and keeps going. Its bottom clears the top of the window ≈ 165 ms after release. |
+
+- **Distance threshold: between 100 and 130 pt** of upward travel (0.16–0.21 × card height),
+  even at slow speed.
+- **Gap close:** the n−2 card slides right into the n−1 slot. It moves about 70 pt (−78 → 0) and
+  starts ≈ 30 ms after release, while the thrown card is still leaving. Critically damped,
+  **response ≈ 205 ms**: 50 % ≈ 60 ms, 90 % ≈ 150 ms, settle ≈ 215 ms after it starts. No overshoot.
+  The cards further left shift with it.
+- The closed tab goes straight to the Archive (§1.5).
+
+### 2.8 Scrolling and the bar (`s5` scroll ladder on the Coffee article; strips `v-scroll-bar-hide-show.jpg`)
+
+Drags rest at their end point, so there's no momentum unless noted. Page offset was found by
+block-matching; the bar position by the + capsule.
+
+| Drag | Page scrolled | Bar |
+|---|---|---|
+| Finger up 10 pt | 0 pt (within touch slop) | stays |
+| Finger up 25 pt | 15 pt | **slides down with the scroll during the drag**, partly hidden; on release it springs back to fully shown in ≈ 100–150 ms |
+| Finger up 50 pt | 40 pt | slides down ≈ 1.1 pt per pt of scroll and is fully hidden after ≈ 45 pt of scroll; **stays hidden** |
+| Finger down 10 pt (bar hidden) | 0 pt | stays hidden |
+| Finger down 25 pt | −15 pt | rises partly during the drag, then completes to fully shown ≈ 200 ms after release |
+| Finger down 50 pt | −40 pt | fully shown by the end of the drag, following the scroll |
+| Flick up (momentum ≈ 2.5 s) | ~1 screen | hides within the first ~3 frames and stays hidden after the momentum ends |
+| Flick down | | back within ≈ 2 frames of the page starting to move |
+
+So the bar is **scroll-linked, not a timed show/hide**. It translates with the content about 1 : 1,
+clamped between shown and hidden, and on release from a partial position it springs to the nearer
+end. Touch slop before the page scrolls is ≈ 10 pt.
+
+### 2.9 Edge swipe back on a tab with no history (`s6`; frames `v-edge-swipe-no-history.jpg`)
+
+On Coffee, which was opened by typing its URL, so it has no back history: a drag from the window's
+left edge (x ≈ 2) 240 pt right in 0.5 s. **There was no back navigation, no tab switch and no Arc UI.**
+The web view took it as a horizontal pan of the wide desktop page: the content shifted ≈ 73–84 pt and
+the wallpaper showed at the window's right edge, then it snapped back ≈ 640 ms later. Arc has no
+edge-swipe gesture of its own here. Whether it has one on a tab with history wasn't tested.
+
 ## 3. Behaviour summary
 
 - **Taps act on touch-up; feedback comes on touch-down.** Cards shrink ~0.5 % and bar buttons brighten.
@@ -186,17 +326,30 @@ response ≈ 0.26 s, damping 1.0; the n−1 card flying out of the thumbnail: re
   tabs button followed by one tap on the centred card is a quick switch to the previous tab.
 - **Long-press**: + becomes voice search at ≤ 0.3 s. The tabs button has no long-press action, and a
   long hold cancels the tap.
-- **Bar** hides completely when you scroll down and comes back when you scroll up. The animation wasn't
-  measured.
-- **Page menu (^)** and **search (+)** are bottom sheets with the same 369 × 47.5 capsule header row and
-  16 pt insets. The menu dims the page and closes when you tap outside.
+- **Bar** is scroll-linked. It slides away ~1 : 1 as the content scrolls down, is fully hidden after
+  ≈ 45 pt, slides back as you scroll up, and on release from partway springs to the nearer end (§2.8).
+- **Bar swipe** follows the finger but only starts above ≈ 150–170 pt/s. A slow drag does nothing.
+  Once it starts it commits, and it settles on a ζ ≈ 0.9–1.0 spring in ≈ 190–250 ms. At the newest tab
+  a swipe toward newer rubber-bands at ≈ 0.5 : 1 (§2.4).
+- **Swipe up from the bar** follows the finger and opens **search**, not the switcher (§2.5).
+- **Card close** follows the finger straight up. Release past 100–130 pt closes it (any speed), and
+  the gap closes on a ≈ 0.2 s critically damped spring (§2.7).
+- **Page menu (^)** and **search (+)** are bottom sheets that grow out of the + capsule, with the same
+  369 × 47.5 capsule header row and 16 pt insets. Both follow a downward swipe and close on a tap
+  outside. Closing is much faster than opening: the menu opens in ≈ 315 ms (response 0.22 s) and
+  collapses in ≈ 60 ms.
+- **Monitor button** opens the "Sync with Arc Desktop" sign-in sheet; the **gear** opens Settings.
+- **No edge-swipe** gesture on a tab with no history: the web view gets the pan (§2.9).
 - **Closing a tab archives it**, and inactive tabs auto-archive after 1 day by default (12 h / 1 d / 3 d / 7 d / 30 d).
 
 ## 4. Not measured, and why
 
 | Item | Why |
 |---|---|
-| Bar swipe left/right between tabs (whether it follows the finger, threshold, velocity), swipe up from the bar into the switcher, flicking a card up to close it, search typing and dismiss timing, page-menu open/close timing, the bar's hide/show animation while scrolling, edge-swipe back with no history | Session 3 (`runs/vid/s3.json`, already scripted) started at ~19:00, and every input failed with `devicectl device info details: The operation failed`. After that, `devicectl` lock-state and display queries time out and `axe doctor` reports "could not read the lock state". The last streamed frames (6:59 PM) show the iPad unlocked and in the switcher. The iPad needs someone to look at it (unlock or reconnect). Then rerun `s3.json` and the remaining flows. |
+| A bar-swipe release threshold (a tracked drag that snaps back) | Every drag that passed the speed gate committed, down to 48 pt of page offset. A drag that starts fast and then stops short would test it; AXe drags move at constant speed. |
+| Swipe up from the bar's very bottom, or from the tabs button corner | iPadOS takes those as a window resize (Caveats) |
+| Edge swipe on a tab **with** back history | Not tested; only the no-history case was asked |
+| Exact search-panel open curve | The field morphs out of the + capsule, so template tracking only locks on for the last ~40 pt; the earlier part is the whole-window difference, which includes the iPad keyboard |
 | How the search panel rides the keyboard | The iPad keyboard is a different, full-width keyboard; this needs a real iPhone |
 | Bar position with the home-indicator inset; layout under the status bar | iPadOS windows have neither |
 | Light-mode switcher and settings | The system was in dark mode; I didn't change system settings |
@@ -207,6 +360,19 @@ response ≈ 0.26 s, damping 1.0; the n−1 card flying out of the thumbnail: re
 - `shots/0x-…png`: window crops at 1× (401 × 878 = pt), measurable directly in points.
 - `shots/z-…png`: 2–6× zooms with a pt grid (red every 50, green every 10), labelled in window pt.
 - `shots/v-…jpg`: contact sheets, labelled in ms from the command start.
-- Raw: `runs/arc-ref/full_*.png` (full 1640 × 2360 screenshots; the window is at px x 420–1222,
-  y 202–1958), `runs/arc-ref/vid/s1*.h264` and `s2*.h264` with `.ts` (arrival times) and `.act` (input
-  log), `s1.json` and `s2.json` (input scripts).
+- `shots/perm-0x-…png`: the iPad's Settings › Privacy & Security › Microphone and › Speech
+  Recognition after Arc Search was switched back on in both (see below).
+- Raw: `runs/arc-ref/full_*.png` (full 1640 × 2360 screenshots). The window sits at px x 420–1222, at
+  y 202–1958 (s1, s2, s4), y 198–1960 (s3b, 401 × 881 pt) or y 204–1960 (s5, s6). The streams are
+  `runs/arc-ref/vid/s1…s6.h264`, each with `.ts` (arrival times) and `.act` (input log). `s3.h264` is
+  the failed first attempt; `s3b` is the rerun.
+
+### Session log
+
+In the first session, a 0.3 s hold on + triggered Arc's microphone and speech-recognition prompts,
+and I answered both **Don't Allow**. That was a mistake: the owner wanted to be asked. In the second
+session I switched Arc Search back **on** in Settings › Privacy & Security › Microphone and
+› Speech Recognition (`shots/perm-01-…`, `perm-02-…`; AXe confirmed both switches went off → on).
+Nothing else in Settings was changed. The 8 test tabs were closed (they're now in Arc's Archive),
+leaving the farewell tab and one tab of the owner's that was already there, and Arc's window is back to
+full screen.
