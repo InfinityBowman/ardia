@@ -3,9 +3,13 @@ import SwiftUI
 
 extension Palette {
   static let menuSheet = Color(.systemBackground)
-  static let menuGroup = Color.adaptive(light: Color(hex: 0xD6D7D9), dark: .white.opacity(0.1))
-  static let menuTile = Color.adaptive(light: Color(hex: 0xD2D3D4), dark: .white.opacity(0.1))
+  static let menuGroup = Color.adaptive(light: Color(hex: 0xD6D7D9), dark: Color(hex: 0x4D4C4C))
+  static let menuRow = Color.adaptive(light: Color(hex: 0xCDCDCF), dark: Color(hex: 0x4F4D4E))
+  static let menuTile = Color.adaptive(light: Color(hex: 0xD2D3D4), dark: Color(hex: 0x444242))
   static let menuTileLabel = Color.adaptive(light: Color(hex: 0x6E6E73), dark: .white.opacity(0.6))
+  static let menuPanel = Color.adaptive(light: Color(hex: 0xF0F0F0), dark: Color(hex: 0x282728))
+  static let menuPanelEdge = Color.adaptive(light: .black.opacity(0.06), dark: .white.opacity(0.16))
+  static let menuRowIcon = Color.adaptive(light: Color(hex: 0x3A3A3C), dark: .white.opacity(0.9))
 }
 
 enum PageMenuLayout {
@@ -17,6 +21,8 @@ enum PageMenuLayout {
   static let tileRadius: CGFloat = 20
   static let tileLabelGap: CGFloat = 6
   static let rowHeight: CGFloat = 47.5
+  static let rowIconSlot: CGFloat = 28
+  static let rowIconGap: CGFloat = 8
   static let groupRadius: CGFloat = 16
   static let panelRadius: CGFloat = 30
   static let overhang: CGFloat = 600
@@ -87,7 +93,21 @@ struct PageMenuGroup<Content: View>: View {
         }
       }
     }
-    .background(Palette.menuGroup, in: .rect(cornerRadius: PageMenuLayout.groupRadius, style: .continuous))
+    .background(Palette.menuRow, in: .rect(cornerRadius: PageMenuLayout.groupRadius, style: .continuous))
+  }
+}
+
+struct PageMenuRowIcon: View {
+  let symbol: String?
+
+  var body: some View {
+    if let symbol {
+      Image(systemName: symbol)
+        .font(.body)
+        .foregroundStyle(Palette.menuRowIcon)
+        .frame(width: PageMenuLayout.rowIconSlot)
+        .accessibilityHidden(true)
+    }
   }
 }
 
@@ -108,6 +128,7 @@ struct PageMenuPressStyle: ButtonStyle {
 }
 
 struct PageMenuRowLabel<Accessory: View>: View {
+  var icon: String?
   var title: Text
   @ViewBuilder var accessory: Accessory
 
@@ -115,9 +136,12 @@ struct PageMenuRowLabel<Accessory: View>: View {
 
   var body: some View {
     HStack(spacing: Spacing.small) {
-      title
-        .font(.callout)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      HStack(spacing: PageMenuLayout.rowIconGap) {
+        PageMenuRowIcon(symbol: icon)
+        title
+          .font(.body)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
       accessory
     }
     .padding(.horizontal, Spacing.page)
@@ -129,18 +153,20 @@ struct PageMenuRowLabel<Accessory: View>: View {
 
 struct PageMenuRow: View {
   var title: LocalizedStringKey
+  var icon: String?
   var enabled = true
   var action: () -> Void
 
-  init(_ title: LocalizedStringKey, enabled: Bool = true, action: @escaping () -> Void) {
+  init(_ title: LocalizedStringKey, icon: String? = nil, enabled: Bool = true, action: @escaping () -> Void) {
     self.title = title
+    self.icon = icon
     self.enabled = enabled
     self.action = action
   }
 
   var body: some View {
     Button(action: action) {
-      PageMenuRowLabel(title: Text(title)) { EmptyView() }
+      PageMenuRowLabel(icon: icon, title: Text(title)) { EmptyView() }
     }
     .buttonStyle(PageMenuRowStyle())
     .foregroundStyle(enabled ? AnyShapeStyle(.primary) : AnyShapeStyle(Color(.tertiaryLabel)))
@@ -150,13 +176,14 @@ struct PageMenuRow: View {
 
 struct PageMenuDisclosureRow: View {
   let title: LocalizedStringKey
+  var icon: String?
   @Binding var isExpanded: Bool
 
   var body: some View {
     Button {
       withAnimation(Motion.snappy) { isExpanded.toggle() }
     } label: {
-      PageMenuRowLabel(title: Text(title)) {
+      PageMenuRowLabel(icon: icon, title: Text(title)) {
         Image(systemName: "chevron.right")
           .font(.footnote.weight(.semibold))
           .foregroundStyle(.secondary)
@@ -172,6 +199,7 @@ struct PageMenuDisclosureRow: View {
 
 struct PageMenuToggleRow: View {
   var title: LocalizedStringKey
+  var icon: String?
   var detail: Text?
   @Binding var isOn: Bool
 
@@ -180,9 +208,12 @@ struct PageMenuToggleRow: View {
   var body: some View {
     Toggle(isOn: $isOn) {
       HStack(spacing: Spacing.small) {
-        Text(title)
-          .font(.callout)
-          .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(spacing: PageMenuLayout.rowIconGap) {
+          PageMenuRowIcon(symbol: icon)
+          Text(title)
+            .font(.body)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
         if let detail {
           detail
             .font(.subheadline)

@@ -37,7 +37,7 @@ struct ToolbarSheet: View {
         }
         VStack(spacing: PageMenuLayout.groupSpacing) {
           PageMenuGroup {
-            PageMenuDisclosureRow(title: "Display Options", isExpanded: $showsDisplay)
+            PageMenuDisclosureRow(title: "Display Options", icon: "doc.text.image", isExpanded: $showsDisplay)
             if showsDisplay, let page {
               nightShadeRow(page)
               zoomRow(page)
@@ -46,8 +46,8 @@ struct ToolbarSheet: View {
             }
           }
           PageMenuGroup {
-            PageMenuRow("Download Video", enabled: isWebPage && page?.isLive == true) { close(then: .downloadVideo) }
-            PageMenuRow("Site Settings") { close(then: .siteSettings) }
+            PageMenuRow("Download Video", icon: "square.and.arrow.down", enabled: isWebPage && page?.isLive == true) { close(then: .downloadVideo) }
+            PageMenuRow("Site Settings", icon: "gearshape") { close(then: .siteSettings) }
           }
           if let page {
             PageMenuGroup {
@@ -55,15 +55,15 @@ struct ToolbarSheet: View {
             }
           }
           PageMenuGroup {
-            PageMenuDisclosureRow(title: "More", isExpanded: $showsMore)
+            PageMenuDisclosureRow(title: "More", icon: "ellipsis.circle", isExpanded: $showsMore)
             if showsMore {
               sendRow
               printRow
-              PageMenuRow("History") { close(then: .sheet(.history)) }
-              PageMenuRow("Bookmarks") { close(then: .sheet(.bookmarks)) }
-              PageMenuRow("Downloads") { close(then: .sheet(.downloads)) }
+              PageMenuRow("History", icon: "clock") { close(then: .sheet(.history)) }
+              PageMenuRow("Bookmarks", icon: "book") { close(then: .sheet(.bookmarks)) }
+              PageMenuRow("Downloads", icon: "arrow.down.circle") { close(then: .sheet(.downloads)) }
               if let page, !app.defaultBrowser.isDefault {
-                PageMenuRow("Open in Default Browser") {
+                PageMenuRow("Open in Default Browser", icon: "safari") {
                   app.openInDefaultBrowser(page)
                   leave()
                 }
@@ -79,9 +79,9 @@ struct ToolbarSheet: View {
     .scrollBounceBehavior(.basedOnSize)
     .scrollDisabled(panelMaxHeight.map { contentHeight <= $0 } ?? false)
     .frame(height: panelMaxHeight.map { min(contentHeight, $0) })
-    .ignoresSafeArea(.container, edges: .bottom)
+    .ignoresSafeArea(.container, edges: panelMaxHeight == nil ? .bottom : .all)
     .onScrollGeometryChange(for: CGFloat.self) { geometry in
-      geometry.contentSize.height + geometry.contentInsets.top
+      geometry.contentSize.height + (panelMaxHeight == nil ? geometry.contentInsets.top : 0)
     } action: { _, height in
       contentHeight = height.rounded(.up)
     }
@@ -304,11 +304,11 @@ struct ToolbarSheet: View {
   }
 
   private var printRow: some View {
-    PageMenuRow("Print", enabled: isWebPage && page?.isLive == true) { close(then: .print) }
+    PageMenuRow("Print", icon: "printer", enabled: isWebPage && page?.isLive == true) { close(then: .print) }
   }
 
   private var translateRow: some View {
-    PageMenuRow("Translate", enabled: isWebPage) {
+    PageMenuRow("Translate", icon: "translate", enabled: isWebPage) {
       confirmsTranslation = true
     }
   }
@@ -318,7 +318,7 @@ struct ToolbarSheet: View {
     let devices = tab.map(app.sendTargets(for:)) ?? []
     if !devices.isEmpty, let tab, isWebPage {
       if devices.count == 1, let device = devices.first {
-        PageMenuRow("Send to \(device.name)") {
+        PageMenuRow("Send to \(device.name)", icon: "paperplane") {
           app.send(tab, to: device)
           leave()
         }
@@ -331,7 +331,7 @@ struct ToolbarSheet: View {
             }
           }
         } label: {
-          PageMenuRowLabel(title: Text("Send to Device")) {
+          PageMenuRowLabel(icon: "paperplane", title: Text("Send to Device")) {
             Image(systemName: "chevron.up.chevron.down")
               .font(.footnote.weight(.semibold))
               .foregroundStyle(.tertiary)
@@ -352,7 +352,7 @@ struct ToolbarSheet: View {
   }
 
   private func nightShadeRow(_ page: WebTab) -> some View {
-    PageMenuToggleRow(title: "Night Shade", isOn: Binding(
+    PageMenuToggleRow(title: "Night Shade", icon: "moon", isOn: Binding(
       get: { nightShadeIsOn(page) },
       set: { app.setNightShade($0, for: page) }
     ))
@@ -360,7 +360,7 @@ struct ToolbarSheet: View {
   }
 
   private func desktopRow(_ page: WebTab) -> some View {
-    PageMenuToggleRow(title: "Desktop Site", isOn: Binding(
+    PageMenuToggleRow(title: "Desktop Site", icon: "desktopcomputer", isOn: Binding(
       get: { app.browse.desktopTabs.contains(tabID) },
       set: { wanted in
         guard wanted != app.browse.desktopTabs.contains(tabID) else { return }
@@ -375,6 +375,7 @@ struct ToolbarSheet: View {
     let count = page.blockedResources.count
     return PageMenuToggleRow(
       title: "Block Ads and Trackers",
+      icon: "shield.lefthalf.filled",
       detail: page.blockersEnabled && count > 0 ? Text(count, format: .number) : nil,
       isOn: Binding(
         get: { page.blockersEnabled },
@@ -395,9 +396,12 @@ struct ToolbarSheet: View {
     let canZoomOut = page.pageZoom > (WebTab.zoomLevels.first ?? 0.5)
     let canZoomIn = page.pageZoom < (WebTab.zoomLevels.last ?? 3)
     return layout {
-      Text("Page Zoom")
-        .font(.callout)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      HStack(spacing: PageMenuLayout.rowIconGap) {
+        PageMenuRowIcon(symbol: "plus.magnifyingglass")
+        Text("Page Zoom")
+          .font(.body)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
       HStack(spacing: 0) {
         Button {
           page.zoomOut()

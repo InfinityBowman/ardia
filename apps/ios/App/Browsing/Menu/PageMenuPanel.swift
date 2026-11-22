@@ -4,8 +4,8 @@ import SwiftUI
 struct PageMenuPanel: View {
   @Environment(AppModel.self) private var app
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-  @Environment(\.profileLook) private var look
+  @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.displayScale) private var displayScale
   @State private var shownID: UUID?
   @State private var rise: CGFloat = 0
   @State private var dimmed = false
@@ -26,6 +26,7 @@ struct PageMenuPanel: View {
             .accessibilityLabel("Close Menu")
             .accessibilityAddTraits(.isButton)
           panel(shownID, safeBottom: safeBottom, maxHeight: proxy.size.height - PageMenuLayout.topGap)
+            .environment(\.colorScheme, menuScheme)
             .offset(y: (1 - rise) * travel + drag)
             .environment(\.pageMenuRise, rise)
             .accessibilityAddTraits(.isModal)
@@ -55,16 +56,17 @@ struct PageMenuPanel: View {
       .id(generation)
   }
 
-  @ViewBuilder
   private var fill: some View {
-    if reduceTransparency {
-      look.surface
-    } else {
-      ZStack {
-        BarBackdropBlur()
-        BrowsePalette.barBandTop
+    Palette.menuPanel
+      .overlay(alignment: .top) {
+        UnevenRoundedRectangle(topLeadingRadius: PageMenuLayout.panelRadius, topTrailingRadius: PageMenuLayout.panelRadius, style: .continuous)
+          .stroke(Palette.menuPanelEdge, lineWidth: 1 / max(displayScale, 1))
       }
-    }
+  }
+
+  private var menuScheme: ColorScheme {
+    guard let tab = app.tabs.selectedTab, let bottom = app.browse.tone(for: tab, page: app.currentPage).bottom else { return colorScheme }
+    return bottom.scheme
   }
 
   private var pull: some Gesture {

@@ -671,6 +671,26 @@ white Wikipedia page:
   Downloads, Open in Default Browser). Arc's light-mode fills `#d6d7d9` (row) and `#d2d3d4` (tile);
   dark mode is a guess, white at 0.1.
 
+- **Material, measured on the iPad 2026-11-22** (dark mode both times, `runs/search3/ipad-arc-menu-*.png`):
+  Arc's menu follows the **page's** tone, not the system appearance, and so differs from its search panel
+  (§6.5). Over a white page: panel `#F4F4F4` at the top to `#E8E8E8` lower down, address row `#D6D7D7`,
+  tiles `#D6D5D6`, rows ≈ `#C9C9CB`, dark text and outlined dark-grey icons. Over a near-black page: panel
+  `#232323` to `#2D2A2B`, address row `#4D4C4C`, tiles `#444242`, rows `#534D4E`, white text and icons;
+  a 1 px light hairline on the panel top. Every row carries a leading outlined icon (Display Options a
+  document with a picture, Site Settings a gear), its centre 30 pt from the row's left and the title at 52 pt.
+- Ardia (since this round): the menu's colour scheme follows the bottom page tone Ardia already samples
+  for the status bar (falling back to the app's appearance), with solid fills at those values (panel
+  `#F0F0F0` / `#282728`, address `#D6D7D9` / `#4D4C4C`, tiles `#D2D3D4` / `#444242`, rows `#CDCDCF` /
+  `#4F4D4E`) instead of the bar's blurred band, which let page colours show through as blotches. Rows
+  have 17 pt titles and an SF Symbol at Arc's offsets: Display Options `doc.text.image`, Download Video
+  `square.and.arrow.down`, Site Settings `gearshape`, Block Ads and Trackers `shield.lefthalf.filled`,
+  More `ellipsis.circle`, and inside them Night Shade `moon`, Page Zoom `plus.magnifyingglass`, Desktop
+  Site `desktopcomputer`, Translate `translate`, Send `paperplane`, Print `printer`, History `clock`,
+  Bookmarks `book`, Downloads `arrow.down.circle`, Open in Default Browser `safari`.
+- The address row now sits 16 pt below the panel top, as Arc's (it was 50 pt: the menu's scroll view
+  counted a 34 pt top content inset, the bottom safe area, into its height, so the panel grew by 34 pt
+  above its content, and its closed pose left the address row 34 pt below the bar line).
+
 ### 6.7 Turning back to the switcher while an older card lands (iPad `s2` r3/r5, `v-tabs-during-zoom.jpg`)
 
 - Arc: tap an older card (Penguin, the n−1 card), then the tabs button 154 ms into the zoom (r3) or
