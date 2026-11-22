@@ -3,11 +3,13 @@ import SwiftUI
 
 extension Palette {
   static let menuSheet = Color(.systemBackground)
-  static let menuGroup = Color.adaptive(light: Color(hex: 0xD6D7D9), dark: Color(hex: 0x4D4C4C))
-  static let menuRow = Color.adaptive(light: Color(hex: 0xCDCDCF), dark: Color(hex: 0x4F4D4E))
-  static let menuTile = Color.adaptive(light: Color(hex: 0xD2D3D4), dark: Color(hex: 0x444242))
+  static let menuGroup = Color.adaptive(light: .black.opacity(0.11), dark: .white.opacity(0.14))
+  static let menuRow = Color.adaptive(light: .black.opacity(0.15), dark: .white.opacity(0.15))
+  static let menuTile = Color.adaptive(light: .black.opacity(0.13), dark: .white.opacity(0.11))
+  static let menuSeparator = Color.adaptive(light: .white.opacity(0.45), dark: .white.opacity(0.1))
   static let menuTileLabel = Color.adaptive(light: Color(hex: 0x6E6E73), dark: .white.opacity(0.6))
   static let menuPanel = Color.adaptive(light: Color(hex: 0xF0F0F0), dark: Color(hex: 0x282728))
+  static let menuMaterialTint = Color.adaptive(light: Color(hex: 0xE4E4E6, opacity: 0.3), dark: Color(hex: 0x1E1D1F, opacity: 0.8))
   static let menuPanelEdge = Color.adaptive(light: .black.opacity(0.06), dark: .white.opacity(0.16))
   static let menuRowIcon = Color.adaptive(light: Color(hex: 0x3A3A3C), dark: .white.opacity(0.9))
 }
@@ -27,17 +29,25 @@ enum PageMenuLayout {
   static let panelRadius: CGFloat = 30
   static let overhang: CGFloat = 600
   static let topGap: CGFloat = 12
-  static let dim: Double = 0.2
+  static let dim: Double = 0.22
   static let pullToClose: CGFloat = 90
   static let flingToClose: CGFloat = 160
   static let open = Animation.spring(response: 0.22, dampingFraction: 1)
-  static let close = Animation.spring(response: 0.12, dampingFraction: 1)
+  static let close = Animation.spring(response: 0.22, dampingFraction: 1)
+  static let expand = Animation.spring(response: 0.3, dampingFraction: 1)
+  static let contentShown: CGFloat = 0.45
+  static let separator: CGFloat = 1
+
+  static func contentOpacity(rise: CGFloat) -> Double {
+    Double(min(max((rise - contentShown) / (1 - contentShown), 0), 1))
+  }
 
   static func travel(panelHeight: CGFloat, safeBottom: CGFloat) -> CGFloat {
     max(panelHeight - BrowseLayout.barLine(safeBottom: safeBottom) - inset - addressHeight / 2, 0)
   }
   static let zoomHeight: CGFloat = 32
   static let zoomButtonWidth: CGFloat = 40
+  static let zoomRadius: CGFloat = 8
 }
 
 struct WindowRoomReader: UIViewRepresentable {
@@ -87,7 +97,7 @@ struct PageMenuGroup<Content: View>: View {
       Group(subviews: content) { subviews in
         ForEach(subviews.indices, id: \.self) { index in
           if index > 0 {
-            Divider().padding(.leading, Spacing.page)
+            Palette.menuSeparator.frame(height: PageMenuLayout.separator)
           }
           subviews[index]
         }
@@ -181,7 +191,7 @@ struct PageMenuDisclosureRow: View {
 
   var body: some View {
     Button {
-      withAnimation(Motion.snappy) { isExpanded.toggle() }
+      withAnimation(PageMenuLayout.expand) { isExpanded.toggle() }
     } label: {
       PageMenuRowLabel(icon: icon, title: Text(title)) {
         Image(systemName: "chevron.right")

@@ -6,6 +6,7 @@ struct PageMenuPanel: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.displayScale) private var displayScale
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @State private var shownID: UUID?
   @State private var rise: CGFloat = 0
   @State private var dimmed = false
@@ -21,6 +22,7 @@ struct PageMenuPanel: View {
         if let shownID {
           Color.black
             .opacity(dimmed ? PageMenuLayout.dim : 0)
+            .padding(.bottom, max(panelHeight - (1 - rise) * travel - drag - PageMenuLayout.panelRadius, 0))
             .contentShape(.rect)
             .onTapGesture { app.browse.isToolbarPresented = false }
             .accessibilityLabel("Close Menu")
@@ -56,8 +58,20 @@ struct PageMenuPanel: View {
       .id(generation)
   }
 
+  @ViewBuilder
+  private var material: some View {
+    if reduceTransparency {
+      Palette.menuPanel
+    } else {
+      ZStack {
+        BarBackdropBlur()
+        Palette.menuMaterialTint
+      }
+    }
+  }
+
   private var fill: some View {
-    Palette.menuPanel
+    material
       .overlay(alignment: .top) {
         UnevenRoundedRectangle(topLeadingRadius: PageMenuLayout.panelRadius, topTrailingRadius: PageMenuLayout.panelRadius, style: .continuous)
           .stroke(Palette.menuPanelEdge, lineWidth: 1 / max(displayScale, 1))

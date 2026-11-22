@@ -19,7 +19,7 @@ struct ToolbarSheet: View {
   @State private var bottomInset: CGFloat = 0
   @State private var windowRoom: CGFloat = .greatestFiniteMagnitude
   @State private var followUp: PageMenuFollowUp?
-  @State private var showsDisplay = false
+  @AppStorage("pageMenu.displayOptionsExpanded") private var showsDisplay = false
   @State private var showsMore = false
   @ScaledMetric(relativeTo: .body) private var capsuleHeight: CGFloat = PageMenuLayout.addressHeight
   @ScaledMetric(relativeTo: .body) private var tileSize: CGFloat = PageMenuLayout.tile
@@ -34,16 +34,17 @@ struct ToolbarSheet: View {
         VStack(spacing: PageMenuLayout.barSpacing) {
           navigationCapsule
           actionButtons
+            .opacity(PageMenuLayout.contentOpacity(rise: rise))
         }
         VStack(spacing: PageMenuLayout.groupSpacing) {
           PageMenuDownloads { close(then: .sheet(.downloads)) }
           PageMenuGroup {
             PageMenuDisclosureRow(title: "Display Options", icon: "doc.text.image", isExpanded: $showsDisplay)
             if showsDisplay, let page {
+              translateRow
               nightShadeRow(page)
               zoomRow(page)
               desktopRow(page)
-              translateRow
             }
           }
           PageMenuGroup {
@@ -76,6 +77,7 @@ struct ToolbarSheet: View {
           }
         }
         .padding(.top, PageMenuLayout.groupSpacing)
+        .opacity(PageMenuLayout.contentOpacity(rise: rise))
       }
       .padding(PageMenuLayout.inset)
       .padding(.bottom, dynamicTypeSize.isAccessibilitySize ? Spacing.large : 0)
@@ -365,7 +367,7 @@ struct ToolbarSheet: View {
   }
 
   private func desktopRow(_ page: WebTab) -> some View {
-    PageMenuToggleRow(title: "Desktop Site", icon: "desktopcomputer", isOn: Binding(
+    PageMenuToggleRow(title: "Request Desktop Site", icon: "desktopcomputer", isOn: Binding(
       get: { app.browse.desktopTabs.contains(tabID) },
       set: { wanted in
         guard wanted != app.browse.desktopTabs.contains(tabID) else { return }
@@ -443,7 +445,7 @@ struct ToolbarSheet: View {
         .accessibilityLabel("Zoom In")
       }
       .font(.body.weight(.medium))
-      .background(Color(.tertiarySystemFill), in: .capsule)
+      .background(Palette.menuTile, in: .rect(cornerRadius: PageMenuLayout.zoomRadius, style: .continuous))
     }
     .buttonStyle(.plain)
     .padding(.horizontal, Spacing.page)
