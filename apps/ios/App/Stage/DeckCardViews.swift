@@ -11,6 +11,8 @@ final class DeckCardView: UIView {
   private let shade = UIView()
   private var liveSnapshot: UIView?
   private(set) var hasImage = false
+  private var topExtension: CGFloat = 0
+  private var reveal: CGFloat = 0
 
   init(tabID: UUID, size: CGSize) {
     self.tabID = tabID
@@ -44,10 +46,25 @@ final class DeckCardView: UIView {
     self.transform = .identity
     bounds = CGRect(origin: .zero, size: size)
     self.transform = transform
-    content.frame = bounds
-    placeholder.frame = bounds
-    shade.frame = bounds
     layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: TabsLayout.cardRadius).cgPath
+    layoutContent()
+  }
+
+  func setTop(extension height: CGFloat, reveal amount: CGFloat) {
+    guard height != topExtension || amount != reveal else { return }
+    topExtension = height
+    reveal = amount
+    layoutContent()
+  }
+
+  private var revealedTop: CGFloat { topExtension * reveal }
+
+  private var imageTop: CGFloat { revealedTop - topExtension }
+
+  private func layoutContent() {
+    content.frame = CGRect(x: 0, y: -revealedTop, width: bounds.width, height: bounds.height + revealedTop)
+    placeholder.frame = CGRect(x: 0, y: revealedTop, width: bounds.width, height: bounds.height)
+    shade.frame = content.bounds
     layoutImage()
     layoutLive()
   }
@@ -107,13 +124,13 @@ final class DeckCardView: UIView {
   private func layoutImage() {
     guard let image = imageView.image, image.size.width > 0 else { return }
     let width = bounds.width
-    imageView.frame = CGRect(x: 0, y: 0, width: width, height: width * image.size.height / image.size.width)
+    imageView.frame = CGRect(x: 0, y: imageTop, width: width, height: width * image.size.height / image.size.width)
   }
 
   private func layoutLive() {
     guard let snapshot = liveSnapshot, snapshot.bounds.width > 0 else { return }
     let scale = bounds.width / snapshot.bounds.width
-    snapshot.layer.position = .zero
+    snapshot.layer.position = CGPoint(x: 0, y: imageTop)
     snapshot.transform = CGAffineTransform(scaleX: scale, y: scale)
   }
 

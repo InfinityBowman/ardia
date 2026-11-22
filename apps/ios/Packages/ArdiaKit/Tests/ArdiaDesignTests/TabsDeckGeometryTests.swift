@@ -14,8 +14,22 @@ struct TabsDeckGeometryTests {
     #expect(abs(arc.leading(at: -2) - 0) < 1)
     #expect(abs(arc.scale(at: -1) - 0.97) < 0.005)
     #expect(abs(arc.scale(at: -2) - 0.92) < 0.005)
-    #expect(abs(arc.cardCenterY - 439) < 0.5)
     #expect(abs(arc.barCenterY - 849.5) < 0.5)
+  }
+
+  @Test func `cards match Arc on a real iPhone: the page below the status bar at 0.7`() {
+    let phone = TabsDeckGeometry(container: CGSize(width: 402, height: 874), safeTop: 62, safeBottom: 34)
+    let top = phone.cardCenterY - phone.cardSize.height / 2
+    let bottom = phone.cardCenterY + phone.cardSize.height / 2
+    #expect(abs(phone.cardSize.width - 281.3) < 0.6)
+    #expect(abs(phone.cardSize.height - 568) < 1.5)
+    #expect(abs(top - 167.3) < 2)
+    #expect(abs(bottom - 734.7) < 1)
+    #expect(abs(phone.leading(at: 0) - 84.2) < 0.5)
+    #expect(abs(phone.leading(at: 1) - 309.2) < 1)
+    #expect(abs(phone.expandedCenter.y - 468) < 0.5)
+    #expect(abs(phone.cardSize.height * phone.expandedScale - 812) < 0.5)
+    #expect(abs(phone.cardTopExtension * phone.expandedScale - 62) < 0.5)
   }
 
   @Test func `the newest card is centred at the end of the deck`() {

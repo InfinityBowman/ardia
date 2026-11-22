@@ -518,6 +518,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       card.transform = CGAffineTransform(rotationAngle: pose.rotation).scaledBy(x: pose.scale, y: pose.scale)
       card.setCorner(pose.corner / max(pose.scale, 0.01), edge: 0.5 / max(pose.scale, 0.01))
       card.setDim(pose.dim)
+      card.setTop(extension: geometry.cardTopExtension, reveal: pose.reveal)
       card.alpha = pose.opacity
       let expanded = role == .expanded ? 100_000.0 : (role == .launcher && isLanding ? 200_000.0 : 0)
       card.layer.zPosition = CGFloat(Double(index) * 2 + expanded)

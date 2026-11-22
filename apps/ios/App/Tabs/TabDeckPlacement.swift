@@ -58,6 +58,7 @@ nonisolated struct DeckPose {
   var opacity: Double
   var rotation: CGFloat = 0
   var dim: CGFloat = 0
+  var reveal: CGFloat = 0
   var headerOpacity: Double
   var visibleWidth: CGFloat
 
@@ -76,6 +77,7 @@ nonisolated struct DeckPose {
     var opacity = 1.0
     var rotation: CGFloat = 0
     var dim = geometry.dim(at: motion.relative)
+    var reveal: CGFloat = 0
     switch role {
     case .stay:
       break
@@ -83,6 +85,7 @@ nonisolated struct DeckPose {
       scale = lerp(geometry.expandedScale, deckScale, scaleT)
       center = lerp(geometry.expandedCenter, deckCenter, positionT)
       corner = lerp(TabsLayout.displayCornerRadius, TabsLayout.cardRadius * deckScale, scaleT)
+      reveal = min(max(1 - scaleT, 0), 1)
       dim *= scaleT
     case .launcher:
       let front = launchDepth == 0
@@ -112,6 +115,7 @@ nonisolated struct DeckPose {
       opacity: opacity,
       rotation: rotation,
       dim: dim,
+      reveal: reveal,
       headerOpacity: min(1, settle) * min(1, liftFade) * Double(1 - vanish) * tuckFade,
       visibleWidth: geometry.visibleWidth(at: motion.relative, isLast: isLast, end: end)
     )

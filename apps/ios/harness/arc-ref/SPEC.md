@@ -531,3 +531,15 @@ Band colour, sampled at x = 120 and 300 (grey average):
   Ardia reaches the same levels with a `.light` blur (its backdrop maps page level p to ≈ 0.74 p + 35 on
   iOS 27.2) under `#171717` at 0.60 → `#0D0D0D` at 0.48: 104 → 123 on white, 33 → 32 on `#141316`.
 - Light mode was not recorded.
+
+### 6.2 Switcher cards (frames 496 at rest, 615–624, 660 for the page)
+
+| Item | iPhone | iPad (§1.2) |
+|---|---|---|
+| Card content | the page **below the status bar** (page y 62 → 874), drawn at **0.6995** scale (template match of the page in frame 660 against the n−1 card in frame 496, mean error 3.3 levels) | the whole window |
+| Card size | **281.2 × 568 pt** (the width ratio is unchanged, 0.70 of the screen) | 281 × 607 |
+| n−1 card | left 84.3, top **167.3**, bottom **734.7** | left 84, top 135, bottom 742 |
+| n (current) card | left 309.5, top 166.8, bottom 735.1 (spacing 225 pt) | left 308–309, 224 pt |
+| Vertical rule | the favicon row (card top − 28 = 139.3) is 77.3 pt below the status bar (62) and the card bottom is 75.3 pt above the + capsule's top (810): the header-plus-card block is centred between the two | centred on the window |
+| Press feedback | the pressed card's top moves 167.3 → 168.7 and its bottom 734.7 → 733.4 (frame 624, the frame before the zoom) | ≈ 0.5 % |
+| Switcher bar | the same line as the page bar: + capsule y 809.7 → 849.7 (centre 829.75), monitor circle centre (40.7, 829.7), fills `#353040`/`#343443` on `#1f1a28` | 850 |

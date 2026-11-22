@@ -17,8 +17,7 @@ public struct TabsDeckGeometry: Equatable, Sendable {
   public static let headerAboveCard: CGFloat = 28
   public static let headerInset: CGFloat = 18
   public static let barCircle: CGFloat = 33.5
-  public static let cardClearanceAboveBar: CGFloat = 16
-  public static let topReserve: CGFloat = 8
+  public static let minimumCardGap: CGFloat = 8
   public static let chromeGap: CGFloat = 21
   public static let headerFaviconOnlyWidth: CGFloat = 72
 
@@ -42,21 +41,21 @@ public struct TabsDeckGeometry: Equatable, Sendable {
     let width = max(container.width, 1)
     let height = max(container.height, 1)
     let barCenter = height - BrowseLayout.barLine(safeBottom: safeBottom)
-    let bandTop = (chromeBottom.map { $0 + Self.chromeGap } ?? safeTop + Self.topReserve) + Self.headerAboveCard
-    let bandBottom = barCenter - Self.barCircle / 2 - Self.cardClearanceAboveBar - reserveAboveBar
-    let band = max(bandBottom - bandTop, 120)
-    let aspect = height / width
-    let cardWidth = min(width * Self.cardWidthRatio, band / aspect)
-    let cardHeight = cardWidth * aspect
+    let ceiling = chromeBottom.map { $0 + Self.chromeGap } ?? safeTop
+    let floor = barCenter - BrowseLayout.barPlus.height / 2 - reserveAboveBar
+    let room = max(floor - ceiling, 120)
+    let pageAspect = max(height - safeTop, 1) / width
+    let tallest = max(room - 2 * Self.minimumCardGap - Self.headerAboveCard, 60)
+    let cardWidth = min(width * Self.cardWidthRatio, tallest / pageAspect)
+    let cardHeight = cardWidth * pageAspect
     cardSize = CGSize(width: cardWidth, height: cardHeight)
     focusLeading = width * Self.focusLeadingRatio
     centeredLeading = (width - cardWidth) / 2
     spacing = min(cardWidth, width * Self.stepRatio)
     firstTuck = width * Self.firstTuckRatio
     tuckReach = width * Self.tuckReachRatio
-    let lowest = bandTop + cardHeight / 2
-    let highest = max(bandBottom - cardHeight / 2, lowest)
-    cardCenterY = min(max(height / 2, lowest), highest)
+    let gap = max((room - Self.headerAboveCard - cardHeight) / 2, 0)
+    cardCenterY = ceiling + gap + Self.headerAboveCard + cardHeight / 2
   }
 
   public static func endBlend(scroll: Double, count: Int) -> CGFloat {
@@ -112,7 +111,9 @@ public struct TabsDeckGeometry: Equatable, Sendable {
 
   public var expandedScale: CGFloat { container.width / max(cardSize.width, 1) }
 
-  public var expandedCenter: CGPoint { CGPoint(x: container.width / 2, y: container.height / 2) }
+  public var expandedCenter: CGPoint { CGPoint(x: container.width / 2, y: (safeTop + container.height) / 2) }
+
+  public var cardTopExtension: CGFloat { safeTop * cardSize.width / max(container.width, 1) }
 
   public var barCenterY: CGFloat { container.height - BrowseLayout.barLine(safeBottom: safeBottom) }
 
