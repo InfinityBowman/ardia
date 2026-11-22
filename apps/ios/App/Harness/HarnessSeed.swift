@@ -1,9 +1,6 @@
 import ArdiaBrowser
 import Foundation
 
-/// Deterministic tabs for the performance harness: with `-ArdiaDemo -ArdiaHarnessSeed <base URL>`
-/// the demo store is filled with `-ArdiaHarnessTabs` (default 6) local fixture pages,
-/// `<base>/page-1.html` … instead of real websites, and the last one is selected.
 enum HarnessSeed {
   @MainActor
   static func seedIfRequested(_ app: AppModel, arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {

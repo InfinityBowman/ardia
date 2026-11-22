@@ -4,17 +4,6 @@ import SwiftUI
 import UIKit
 import WebKit
 
-/// The tab deck on a phone, built for speed:
-///
-/// - It is created once and stays mounted; showing it is a state change, never a view build.
-/// - Cards are UIViews moved by `UIViewPropertyAnimator`, so transitions run in the render server and
-///   a busy main thread cannot drop their frames. Every transition can be reversed or redirected
-///   mid-flight; taps are hit-tested against where cards are on screen, not where they are going.
-/// - The page's card is a GPU `snapshotView` of the live web view, free to make; the saved thumbnail
-///   is taken afterwards with WebKit's asynchronous snapshot.
-/// - A tapped tab is selected at once, so its page is ready under the deck when the card lands.
-///
-/// The header, grid, archive card and bar stay SwiftUI, hosted above the cards.
 final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, UIContextMenuInteractionDelegate {
   enum Phase: Equatable {
     case hidden
@@ -35,7 +24,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
   private let grid = UIHostingController(rootView: AnyView(EmptyView()))
   private let gridShell = AccessibilityGate()
   private let bar = UIHostingController(rootView: AnyView(EmptyView()))
-  /// The page's bar, kept built at all times so swapping to it is an opacity change, not a SwiftUI build.
   private let pageBar = UIHostingController(rootView: AnyView(EmptyView()))
   private let pageBarShell = AccessibilityGate()
   private let topChromeShell = PassthroughView()
@@ -59,8 +47,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
   private var drag: Drag?
   private var panStart: CGPoint = .zero
   private var tickedCard: Int?
-  /// The touch event a tabs-button press during a landing was claimed in. UIKit hit-tests a touch
-  /// more than once; every pass for that event must keep it with the root.
   private var ownedTouchEvent: TimeInterval?
   private let selection = UISelectionFeedbackGenerator()
   private let impact = UIImpactFeedbackGenerator(style: .light)
@@ -72,17 +58,11 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
 
   required init?(coder: NSCoder) { nil }
 
-  // MARK: - View
-
   override func loadView() {
     let root = AccessibilityGate()
     root.claim = { [weak self] point, event in self?.rootClaim(point, event: event) ?? .normal }
-    // isHidden, not alpha 0: a transparent full-screen tree still sits in front of the page for
-    // accessibility, hiding the page's elements from VoiceOver.
     root.isHidden = true
     root.backgroundColor = .clear
-    // The deck is dark whatever the system appearance, as Arc's is: pages read as lit cards on a
-    // space-tinted night backdrop. The page's own bar (pageBar) keeps the page's appearance.
     for host in [backdrop, topChrome, bar, grid] { host.overrideUserInterfaceStyle = .dark }
     for host in [backdrop, topChrome, bar, pageBar, grid] {
       host.view.backgroundColor = .clear
@@ -160,13 +140,8 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     if phase == .settled { layoutCards() }
   }
 
-  // MARK: - Surface
-
-  /// Set while the deck has been shown directly from a tap and `app.surface` has not caught up yet.
   private var awaitingSurface = false
 
-  /// Builds the cards for the current tabs while the app is idle after launch, so the first open
-  /// pays no construction cost.
   func prewarm() {
     guard phase == .hidden, isViewLoaded else { return }
     updateGeometry()
@@ -175,8 +150,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     UIView.performWithoutAnimation { layoutCards() }
   }
 
-  /// Shows the deck from a tap without waiting for SwiftUI: the zoom-out is handed to Core Animation
-  /// in this run-loop pass, and the surface change (and SwiftUI's re-render of the page behind) follows.
   func presentFromTap() {
     guard phase == .hidden else { return }
     awaitingSurface = true
@@ -195,7 +168,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     case (.tabSwitcher, _), (_, .hidden), (_, .closing), (_, .returning):
       break
     default:
-      // Something else took the user away (a search result, the grid, a received tab): leave at once.
       hide()
     }
   }
@@ -234,7 +206,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     setVisible(true)
     let reduceMotion = UIAccessibility.isReduceMotionEnabled
     guard let from, order.contains(from), !reduceMotion, !app.deck.isGrid else {
-      // Plain entrance (from the start page, the grid, reduced motion): a quick fade.
       phase = .settled
       if app.deck.isGrid { stage.gridScroll += 1 }
       applyGrid(animated: false)
@@ -266,10 +237,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     commitNow()
   }
 
-  /// The page just left. Its saved thumbnail is taken as soon as the zoom-out is on the render
-  /// server, while the page is still in the window: waiting for the deck to come to rest lost it
-  /// whenever another card was tapped first, and that card later landed on a stale picture that
-  /// jumped to the live page.
   private var pendingThumbnail: (webView: WKWebView, id: UUID)?
 
   private func capturePendingThumbnail() {
@@ -284,14 +251,10 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     phase = .settled
   }
 
-  /// Opens a tab from the deck. Selecting happens now, so the page is in place before the card lands.
   private func open(_ id: UUID) {
     HarnessProbe.mark("deck.cardTap")
     stage.blurSearch += 1
     if case .opening(id) = phase {
-      // Tapped the page's own card mid zoom-out: head straight back from wherever it is. A fresh
-      // ease-out from the current position lands in a fixed, short time; reversing the spring would
-      // replay its whole slow tail.
       HarnessProbe.mark("deck.return")
       stopTransition()
       phase = .returning(id)
@@ -314,13 +277,10 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       card.setImage(coverImage(for: id))
     }
     runHome(to: id, duration: Self.landingDuration)
-    // The animation is committed to Core Animation first; selecting the tab (waking its web view,
-    // re-rendering the page underneath) then happens while the card is already moving.
     commitNow()
     app.beginOpening(id)
   }
 
-  /// Reverses a landing card back into the deck, from wherever it is on screen.
   private func reopen(from id: UUID) {
     guard order.contains(id) else { return }
     stopTransition()
@@ -343,7 +303,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     commitNow()
   }
 
-  /// Expands the card for `id` to fill the screen and hands over to the page when it lands.
   private func runHome(to id: UUID, duration: TimeInterval) {
     let animator = UIViewPropertyAnimator(duration: duration, timingParameters: Self.landing)
     animator.isInterruptible = true
@@ -364,13 +323,8 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     animator.startAnimation()
   }
 
-  /// A card growing into its page. Long enough to read as a move rather than a cut; it never holds
-  /// anyone up, since a press on the tabs button reverses it at any point.
   private static let landingDuration: TimeInterval = 0.34
-  /// Going back into the page just left, from partway out: a shorter trip.
   private static let returnDuration: TimeInterval = 0.28
-  /// A soft ease-out with a definite end (what the hand-off to the page needs). Less front-loaded
-  /// than a snap: about 60% of the way at a third of the time, then a long gentle settle.
   private static let landing = UICubicTimingParameters(controlPoint1: CGPoint(x: 0.2, y: 0.8), controlPoint2: CGPoint(x: 0.2, y: 1))
 
   private func finishClosing(on id: UUID) {
@@ -412,8 +366,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     return UISpringTimingParameters(mass: 1, stiffness: stiffness, damping: 2 * sqrt(stiffness), initialVelocity: velocity)
   }
 
-  // MARK: - Cards
-
   private var sourceOrder: [UUID] {
     let needle = stage.query.trimmingCharacters(in: .whitespacesAndNewlines)
     let ordered = app.deckOrder
@@ -421,7 +373,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     return ordered.filter { TabText.matches($0, needle) }.map(\.id)
   }
 
-  /// Makes a card and header for every tab in the order and drops the rest.
   private func syncCards() {
     let byID = Dictionary(app.deckTabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     let wanted = Set(order)
@@ -482,21 +433,17 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     case .returning(let expanded):
       return launchRole(for: id, at: index, expanded: expanded)
     case .closing(let expanded):
-      // Everything but the tapped card gathers back into the tabs button.
       guard order.contains(expanded) else { return .stay }
       return id == expanded ? .expanded : .launcher
     }
   }
 
-  /// Roles while zooming out of a page, and while reversing that zoom back into it.
   private func launchRole(for id: UUID, at index: Int, expanded: UUID?) -> DeckRole {
     guard let expanded, let expandedIndex = order.firstIndex(of: expanded) else { return .stay }
     if id == expanded { return .expanded }
     return index < expandedIndex ? .launcher : .slideRight
   }
 
-  /// Puts every card where the current phase, scroll and progress say it belongs. Called inside an
-  /// animator to animate there, or outside one to jump.
   private func layoutCards(progress: Double = 1) {
     let range = TabsDeckGeometry.renderedRange(around: scroll, count: order.count)
     for (index, id) in order.enumerated() {
@@ -512,8 +459,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       card.transform = CGAffineTransform(rotationAngle: pose.rotation).scaledBy(x: pose.scale, y: pose.scale)
       card.setCorner(pose.corner / max(pose.scale, 0.01), edge: 0.5 / max(pose.scale, 0.01))
       card.alpha = pose.opacity
-      // Leaving the deck, gathered cards fly over the growing page into the button; arriving, they
-      // come out from behind it.
       let expanded = role == .expanded ? 100_000.0 : (role == .launcher && isLanding ? 200_000.0 : 0)
       card.layer.zPosition = CGFloat(Double(index) * 2 + expanded)
       header.layer.zPosition = CGFloat(Double(index) * 2 + 1 + expanded)
@@ -538,7 +483,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     }
   }
 
-  /// Gathered cards fan out a little, like the stack on the tabs button.
   private func tilt(at index: Int) -> CGFloat {
     index % 2 == 0 ? -0.2 : -0.07
   }
@@ -547,12 +491,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     for (id, header) in headers { header.alpha = alpha * max(0, 1 + (lifts[id] ?? 0) / 120) }
   }
 
-  /// While a card lands, the page it lands on is already in place underneath.
-  /// - A finger on the page's tabs button turns straight back into the deck, on touch-down: the
-  ///   landing is nearly over by then, and anything that waits (a gesture recognizer, even a
-  ///   zero-duration long press, fires some 40 ms later) finds the deck already gone.
-  /// - A touch anywhere else lands the card at once and goes through to the page, so the page is
-  ///   live from the first touch.
   private func rootClaim(_ point: CGPoint, event: UIEvent?) -> TouchClaim {
     guard let event, event.type == .touches else { return .normal }
     if ownedTouchEvent == event.timestamp { return .own }
@@ -560,7 +498,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     if isOnPageTabsButton(point) {
       if case .closing(let id) = phase { turnBack(to: id) }
       if case .returning(let id) = phase { turnBack(to: id) }
-      // The rest of this touch was the tabs press; nothing in the deck may act on it.
       ownedTouchEvent = event.timestamp
       return .own
     }
@@ -584,8 +521,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     }
   }
 
-  /// A tabs-button press that reached the page's own bar while a card was still landing.
-  /// Returns whether it turned back into the deck.
   func turnBackIfLanding() -> Bool {
     switch phase {
     case .closing(let id), .returning(let id):
@@ -596,14 +531,12 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     }
   }
 
-  /// The header strip (and archive card), or everything when the grid or empty state is up.
   private func topChromeTakes(_ point: CGPoint) -> Bool {
     if stage.isEmpty { return true }
     let chrome = stage.isShowingArchiveCard ? TabsLayout.archiveCardBottom : TabsLayout.headerBottom
     return point.y < geometry.safeTop + chrome
   }
 
-  /// The bottom bar's strip, wherever the keyboard has pushed it.
   private func barTakes(_ point: CGPoint) -> Bool {
     point.y >= barTop - 8
   }
@@ -621,14 +554,12 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     stage.set(\.isPresented, visible)
   }
 
-  /// Which bar is showing: the deck's, or (from the moment a tab is tapped) the page's.
   private func setPageBar(_ page: Bool) {
     barShell.alpha = page ? 0 : 1
     barShell.isUserInteractionEnabled = !page
     pageBarShell.alpha = page ? 1 : 0
   }
 
-  /// Hands the animation just started to Core Animation now, before any heavy work in this pass.
   private func commitNow() {
     CATransaction.flush()
     HarnessProbe.mark("anim.committed")
@@ -644,20 +575,13 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     min(max(Int(scroll.rounded()), 0), max(order.count - 1, 0))
   }
 
-  // MARK: - Thumbnails
-
-  /// A GPU copy of the page as it is on screen (no main-thread drawing), sized to the page.
   private func liveSnapshot(of webView: WKWebView) -> UIView? {
     webView.snapshotView(afterScreenUpdates: false)
   }
 
-  /// The saved card image, taken by WebKit off the main thread once the deck is already moving.
   private func captureThumbnail(of webView: WKWebView, tabID: UUID) {
     let configuration = WKSnapshotConfiguration()
-    // `false` hands back a blank white image for a page that is already on screen; `true` waits for
-    // the next paint, which costs nothing here since WebKit renders it off the main thread.
     configuration.afterScreenUpdates = true
-    // 2x pixels: sharp on a card, and 44% of the bytes of a 3x capture.
     configuration.snapshotWidth = NSNumber(value: Double(webView.bounds.width) * min(Double(webView.traitCollection.displayScale), 2) / max(Double(webView.traitCollection.displayScale), 1))
     webView.takeSnapshot(with: configuration) { [weak self] image, _ in
       MainActor.assumeIsolated {
@@ -669,8 +593,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     }
   }
 
-  // MARK: - Gestures
-
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
     let landing: Bool
     switch phase {
@@ -678,11 +600,9 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     case .opening, .settled: landing = false
     case .closing, .returning: landing = true
     }
-    // Cards take no touches while one lands: the deck is leaving.
     return !landing
   }
 
-  /// Where the page's bar draws its tabs button (leading end of the bar), generously.
   private func isOnPageTabsButton(_ point: CGPoint) -> Bool {
     let leading = view.effectiveUserInterfaceLayoutDirection == .rightToLeft ? view.bounds.width - point.x : point.x
     return point.y >= barTop - 16 && leading <= geometry.safeSide + TabsLayout.barSideInset + TabsLayout.barCircle + 28
@@ -692,7 +612,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     false
   }
 
-  /// The card under a point as it is on screen right now, mid-animation included.
   private func card(at point: CGPoint) -> UUID? {
     var best: (UUID, CGFloat)?
     for (id, card) in cards where !card.isHidden && card.alpha > 0.05 {
@@ -724,7 +643,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       drag = nil
       panStart = CGPoint(x: recognizer.location(in: cardsView).x - translation.x, y: recognizer.location(in: cardsView).y - translation.y)
     case .changed:
-      // The direction is decided on the first real movement; at .began the translation can be zero.
       if drag == nil, phase == .settled, hypot(translation.x, translation.y) > 4 {
         if abs(translation.y) > abs(translation.x), translation.y < 0, let id = card(at: panStart) {
           drag = .lift(id, start: lifts[id] ?? 0)
@@ -774,7 +692,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     }
   }
 
-  /// A drag during the zoom-out takes over from wherever the cards are.
   private func landOpening() {
     stopTransition()
     settled()
@@ -784,10 +701,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     }
   }
 
-  // MARK: - Scroll settling
-
-  /// Scroll is a single number the cards are laid out from, so it settles on a display link with
-  /// a critically damped spring: interruptible at any instant by the next drag.
   private func settle(to target: Int, velocity: Double = 0) {
     stopSettling()
     let clamped = Double(min(max(target, 0), max(order.count - 1, 0)))
@@ -811,8 +724,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     settleLink = nil
     settle = nil
   }
-
-  // MARK: - Closing tabs
 
   private func close(_ id: UUID, animated: Bool) {
     guard order.contains(id) else { return }
@@ -842,8 +753,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       self.headers[id]?.alpha = 0
     } completion: { _ in remove() }
   }
-
-  // MARK: - Keeping up with the model
 
   private func observeModel() {
     guard !observing else { return }
@@ -932,7 +841,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
 
   private var gridShown = false
 
-  /// Shows the grid or the stack. Both stay built; this only crossfades them.
   private func applyGrid(animated: Bool) {
     let showGrid = app.deck.isGrid
     gridShown = showGrid
@@ -953,8 +861,6 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     updateGeometry()
     UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: 0.3)).run { self.layoutCards() }
   }
-
-  // MARK: - Card menu
 
   func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
     guard phase == .settled, let card = interaction.view as? DeckCardView, let tab = app.tabs.tab(card.tabID) else { return nil }
@@ -1025,7 +931,6 @@ private extension UIViewPropertyAnimator {
   }
 }
 
-/// A critically damped spring for one number, evaluated in closed form so any instant can be read.
 private struct ScrollSpring {
   let from: Double
   let to: Double
@@ -1050,12 +955,8 @@ private final class DisplayLinkProxy: NSObject {
   @objc func fire() { handler() }
 }
 
-/// A container whose subtree accessibility sees only while it is open. SwiftUI gathers a
-/// representable's accessibility elements through its own bridge, which ignores `isHidden`, so the
-/// hidden deck (and the inert copy of the page's bar) must say outright that it has none.
 final class AccessibilityGate: UIView {
   var isOpen = false
-  /// Who gets a touch at a point; nil is `.normal` everywhere.
   var claim: ((CGPoint, UIEvent?) -> TouchClaim)?
 
   override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
@@ -1082,9 +983,6 @@ final class AccessibilityGate: UIView {
   }
 }
 
-/// Lets touches fall through outside the region its hosted SwiftUI draws controls in. Since iOS 18
-/// a hosting view reports itself as the hit view for its own buttons, so "did the hit land on the
-/// hosting view" can't tell a control from empty space; the owner says where the controls are.
 final class PassthroughView: UIView {
   var accepts: (CGPoint) -> Bool = { _ in true }
 
@@ -1096,10 +994,7 @@ final class PassthroughView: UIView {
 }
 
 enum TouchClaim {
-  /// Ordinary hit testing.
   case normal
-  /// Through to whatever is underneath.
   case pass
-  /// Kept by the view itself; none of its subviews see it.
   case own
 }

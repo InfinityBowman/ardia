@@ -37,19 +37,17 @@ RUNS = os.path.join(HERE, "runs")
 PORT = 8765
 FIXTURES = f"http://127.0.0.1:{PORT}/"
 
-# What "as quick as Arc" means, from frame-by-frame measurement of Arc on an iPhone 16 Pro.
 TARGETS = {
-    "fall_ms": 450,            # tap on the card -> page fully back. Arc snaps in ~150-170 ms; Jacob found that too fast, so the landing is 0.34 s (interruptible)
-    "stall_frames": 0,         # frames where nothing moves in the middle of a transition
-    "flash_frames": 0,         # transient frames (placeholders, wrong chrome) that vanish again
-    "main_busy_max_ms": 16.7,  # longest main-thread pass: one frame at the simulator's 60 Hz (aim for 8 on a 120 Hz phone)
-    "dropped_frames": 0,       # display-link frames the app missed during the scenario
-    "tap_commit_ms": 8,        # worst time from a tap to its animation reaching Core Animation
+    "fall_ms": 450,
+    "stall_frames": 0,
+    "flash_frames": 0,
+    "main_busy_max_ms": 16.7,
+    "dropped_frames": 0,
+    "tap_commit_ms": 8,
     "pager_first_move_ms": 40,
     "pager_settle_ms": 600,
 }
 
-# Which targets each scenario is judged on (round trips only mean something when tapping fast).
 CHECKS = {
     "deck-rapid": ["fall_ms", "tap_commit_ms", "stall_frames", "flash_frames", "main_busy_max_ms", "dropped_frames"],
     "swipe-tabs": ["stall_frames", "flash_frames", "tap_commit_ms", "main_busy_max_ms", "dropped_frames", "pager_first_move_ms", "pager_settle_ms"],
@@ -80,8 +78,6 @@ def udid():
     sys.exit(f'no simulator named "{SIM_NAME}"; create one with: xcrun simctl create "{SIM_NAME}" '
              "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro com.apple.CoreSimulator.SimRuntime.iOS-27-2")
 
-
-# ---------------------------------------------------------------- build, serve, launch
 
 def build(args):
     sim = udid()
@@ -149,11 +145,9 @@ def launch(args, tabs=6, extra=(), launched=None):
     settled = time.time() + 2.5
     if launched:
         launched(sim)
-    time.sleep(max(0, settled - time.time()))  # let the selected page load and paint
+    time.sleep(max(0, settled - time.time()))
     return sim
 
-
-# ---------------------------------------------------------------- UI helpers
 
 def describe(sim):
     raw = sh(["axe", "describe-ui", "--udid", sim]).stdout
@@ -204,8 +198,6 @@ def shot(args):
 def batch(sim, steps):
     sh(["axe", "batch", "--udid", sim, *sum((["--step", s] for s in steps), [])], timeout=600)
 
-
-# ---------------------------------------------------------------- scenarios
 
 def scenario_deck_rapid(sim, cycles=8, out_gap=0.15, back_gap=0.25):
     """Tabs button, then the card you came from, as fast as Arc lets you (Arc: ~0.3 s per cycle)."""
@@ -294,7 +286,6 @@ def scenario_deck_interrupt(sim, cycles=6, press=0.25):
         sys.exit("no tab card found in the switcher")
     steps = []
     for i in range(cycles):
-        # Alternate the page's own card (the return path) and the one to its left (the switch path).
         cx = card["x"] if i % 2 == 0 else 60
         steps += [f"tap -x {cx:.0f} -y {card['y']:.0f}", "sleep 0.04",
                   f"tap -x {x:.0f} -y {y:.0f} --hold {press}", "sleep 0.9"]
@@ -343,8 +334,6 @@ SCENARIOS = {
 }
 
 
-# ---------------------------------------------------------------- analysis
-
 def video_frames(path, w=60, h=130):
     raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-vf", f"scale={w}:{h},format=gray", "-f", "rawvideo",
                           "-fps_mode", "passthrough", "-"], capture_output=True, check=True).stdout
@@ -384,10 +373,7 @@ def analyse_video(path):
                 j = i
                 while j < b and move[j] < 0.5:
                     j += 1
-                # a frozen run inside a trip; a long one is the switcher sitting open, not a stall
                 frozen = pts[j] - pts[i]
-                # ignore sub-two-frame gaps (recordings are variable-rate); a long freeze is the
-                # switcher sitting open between taps, not a stall
                 if 0.030 <= frozen < 0.35 and j < b:
                     stalls.append({"at": round(pts[i], 3), "ms": round((pts[j] - pts[i]) * 1000), "away": round(away[i], 1)})
                 i = j
@@ -401,7 +387,6 @@ def analyse_video(path):
                 flashes.append({"at": round(pts[i], 3), "frames": k})
                 break
     durations = [round((pts[b] - pts[a]) * 1000) for a, b in trips]
-    # each trip splits at its furthest point from the page: rise (leaving) and fall (coming home)
     rises, falls = [], []
     for a, b in trips:
         peak = max(range(a, b), key=lambda i: away[i])
@@ -423,7 +408,6 @@ def analyse_video(path):
 
 
 def window_start(events, meta):
-    """Media time at which the scripted interaction began (setup and calibration happen before it)."""
     start = next((e for e in events if e.get("k") == "start"), {})
     if "window_start_wall" in meta and "wall" in start:
         return start["t"] + (meta["window_start_wall"] - start["wall"])
@@ -467,7 +451,6 @@ def analyse_probe(events, t0=None):
         if out:
             latencies[key] = out
 
-    # tap -> commit: how long after a tap its run-loop pass ends and the animation reaches Core Animation
     for name in ("tabs.tap", "deck.cardTap", "search.open", "search.close", "pager.begin", "pager.settle"):
         values = []
         for m in marks:
@@ -579,7 +562,6 @@ def summarise(report):
 
 
 def analyse_trace(directory, events, t0=None):
-    """Main-thread CPU samples from trace.trace, grouped by the slow run-loop passes the probe saw."""
     trace = os.path.join(directory, "trace.trace")
     if not os.path.exists(trace):
         return None
@@ -595,7 +577,6 @@ def analyse_trace(directory, events, t0=None):
     if not started or not start or "wall" not in start or not os.path.exists(xml_path):
         return {"error": "trace could not be aligned"}
     trace_wall = datetime.datetime.fromisoformat(started.group(1).replace("Z", "+00:00")).timestamp()
-    # media time of the trace's zero
     offset = start["t"] - (start["wall"] - trace_wall)
     root = ET.parse(xml_path).getroot()
     node = root.find("node")

@@ -1,5 +1,3 @@
-// PhoneCap <seconds> <out.mov> <log.txt>
-// Records the USB-connected iPhone's screen, writing every frame with its capture timestamp.
 import AVFoundation
 import CoreMediaIO
 

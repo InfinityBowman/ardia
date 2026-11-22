@@ -3,7 +3,6 @@ import ArdiaDesign
 import SwiftUI
 import UIKit
 
-/// State the SwiftUI chrome of the deck stage reads; the UIKit controller owns it.
 @MainActor
 @Observable
 final class DeckStageModel {
@@ -15,12 +14,9 @@ final class DeckStageModel {
   var isConfirmingCloseIncognito = false
   var keyboardOverlap: CGFloat = 0
   var blurSearch = 0
-  /// Bumped each time the grid is shown, to scroll it to the selected tab.
   var gridScroll = 0
-  /// Whether the deck is on screen; its SwiftUI hides itself from accessibility when not.
   var isPresented = false
 
-  /// Writes only on change: Observation notifies on every assignment, equal or not.
   func set<Value: Equatable>(_ key: ReferenceWritableKeyPath<DeckStageModel, Value>, _ value: Value) {
     if self[keyPath: key] != value { self[keyPath: key] = value }
   }
@@ -32,7 +28,6 @@ final class DeckStageModel {
   @ObservationIgnored var closeAll: () -> Void = {}
 }
 
-/// Environment the stage's hosted SwiftUI needs from RootView; hosted controllers don't inherit it.
 struct DeckStageEnvironment: Equatable {
   var look: ProfileLook
   var usesGlass: Bool
@@ -49,7 +44,6 @@ extension View {
   }
 }
 
-/// Header, archive card, empty state, grid and dialogs: everything above the cards except the bar.
 struct DeckStageTopChrome: View {
   @Bindable var stage: DeckStageModel
   @Environment(AppModel.self) private var app
@@ -96,8 +90,6 @@ struct DeckStageTopChrome: View {
   }
 }
 
-/// The grid, kept built for as long as the deck is mounted: switching between stack and grid is a
-/// crossfade of two finished layers, never a SwiftUI build.
 struct DeckStageGrid: View {
   let stage: DeckStageModel
   @Environment(AppModel.self) private var app
@@ -129,8 +121,6 @@ struct DeckStageGrid: View {
   }
 }
 
-/// The bottom bar. It is on screen from the first frame the deck is, and becomes the page's bar the
-/// moment a tab is tapped, so the bar never disappears, fades or swaps late.
 struct DeckStageBar: View {
   @Bindable var stage: DeckStageModel
   @Environment(AppModel.self) private var app
@@ -176,8 +166,6 @@ struct DeckStageBar: View {
   }
 }
 
-/// The browsing bar drawn where BrowsingView draws it, inert, for the frames between tapping a
-/// card and the deck leaving.
 struct PageBarStandIn: View {
   let safeSide: CGFloat
   @Environment(AppModel.self) private var app
@@ -212,7 +200,6 @@ struct OptionalColorScheme: ViewModifier {
   }
 }
 
-/// Mounts the deck stage once and keeps it: opening the deck is a state change, never a view build.
 struct DeckStageHost: UIViewControllerRepresentable {
   let surface: AppModel.Surface
   @Environment(AppModel.self) private var app

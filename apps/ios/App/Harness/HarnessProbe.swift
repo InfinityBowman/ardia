@@ -3,17 +3,6 @@ import os
 import QuartzCore
 import UIKit
 
-/// Frame-level instrumentation for the performance harness (`apps/ios/harness`).
-///
-/// Off unless the app is launched with `-ArdiaProbe`. When on it writes JSON lines to
-/// `Documents/harness/probe.jsonl`:
-/// - `{"k":"f", ...}` every display-link tick: when the frame was due and when we actually ran,
-///   so a late or skipped frame shows up as a gap.
-/// - `{"k":"busy", ...}` every main run-loop pass that kept the thread busy for over 4 ms: the
-///   direct measure of a stall, whatever caused it.
-/// - `{"k":"m", ...}` named marks at interaction points (`HarnessProbe.mark("tabs.tap")`), also
-///   emitted as signposts so they line up with Instruments traces.
-/// All times are `CACurrentMediaTime()` seconds.
 @MainActor
 final class HarnessProbe {
   static let shared: HarnessProbe? = ProcessInfo.processInfo.arguments.contains("-ArdiaProbe") ? HarnessProbe() : nil
@@ -112,8 +101,6 @@ final class HarnessProbe {
 }
 
 extension HarnessProbe {
-  /// Logs every touch's phase, place and the view UIKit hit-tests it to, so a tap that does nothing
-  /// can be traced to whoever swallowed it.
   fileprivate func watchTouches() {
     let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
     guard let window = windows.first(where: \.isKeyWindow) ?? windows.first else {

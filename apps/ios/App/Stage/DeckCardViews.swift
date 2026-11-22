@@ -3,8 +3,6 @@ import ArdiaDesign
 import SwiftUI
 import UIKit
 
-/// One tab card in the deck stage: a plain UIView whose position, scale, corners and opacity are
-/// animated by Core Animation, so a busy main thread never drops a frame of a transition.
 final class DeckCardView: UIView {
   let tabID: UUID
   private let content = UIView()
@@ -36,7 +34,6 @@ final class DeckCardView: UIView {
 
   required init?(coder: NSCoder) { nil }
 
-  /// Card size changes only with the container (rotation, archive card); never mid-animation.
   func resize(to size: CGSize) {
     let transform = self.transform
     self.transform = .identity
@@ -52,7 +49,6 @@ final class DeckCardView: UIView {
   private var configuredKey = ""
 
   func configure(tab: BrowserTab, image: UIImage?) {
-    // Re-setting identical text and colours still invalidates layers; skip when nothing changed.
     let key = "\(tab.title)|\(tab.url)|\(tab.isPrivate)|\(tab.themeColorHex ?? "")"
     if key != configuredKey {
       configuredKey = key
@@ -78,8 +74,6 @@ final class DeckCardView: UIView {
     layoutImage()
   }
 
-  /// A GPU snapshot of the live page (`snapshotView(afterScreenUpdates: false)`): free to make,
-  /// pixel-identical to the page, and drawn at the page's size scaled down to the card.
   func setLive(_ snapshot: UIView?) {
     liveSnapshot?.removeFromSuperview()
     liveSnapshot = snapshot
@@ -118,7 +112,6 @@ final class DeckCardView: UIView {
   }
 }
 
-/// The favicon and title above a card. Plain UIKit so moving it costs nothing per frame.
 final class DeckCardHeaderView: UIView {
   private let icon: UIHostingController<AnyView>
   private let label = UILabel()
@@ -138,7 +131,6 @@ final class DeckCardHeaderView: UIView {
     addSubview(label)
     isUserInteractionEnabled = false
     isAccessibilityElement = false
-    // The deck is always dark (see DeckStageController), so its labels are light.
     overrideUserInterfaceStyle = .dark
   }
 
@@ -154,13 +146,10 @@ final class DeckCardHeaderView: UIView {
     }
   }
 
-  /// Lays the icon and title out centred in the visible strip of the card, revealing the title only
-  /// when there is room, the way the SwiftUI deck header did.
   func layout(width available: CGFloat) {
     let iconSize = TabsLayout.faviconSize
     let reveal = DeckHeaderMetrics.titleReveal(width: available)
     let titleWidth = min(label.intrinsicContentSize.width, max(available - iconSize - TabsLayout.headerSpacing, 0))
-    // Pinned to the card's leading edge, the way Arc labels its cards.
     let leading: CGFloat = 2
     let height = bounds.height
     icon.view.frame = CGRect(x: leading, y: (height - iconSize) / 2, width: iconSize, height: iconSize)
@@ -170,7 +159,6 @@ final class DeckCardHeaderView: UIView {
   }
 }
 
-/// The title card shown on a card with no screenshot yet.
 final class DeckCardPlaceholderView: UIView {
   private let title = UILabel()
   private let host = UILabel()
