@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ToastView: View {
   let toast: Toast
+  var onAction: (ToastAction) -> Void = { _ in }
 
   var body: some View {
     HStack(spacing: Spacing.tight) {
@@ -10,19 +11,72 @@ struct ToastView: View {
         .font(.subheadline.weight(.semibold))
         .symbolRenderingMode(.hierarchical)
         .accessibilityHidden(true)
-      Text(toast.message)
-        .font(.subheadline.weight(.semibold))
-        .multilineTextAlignment(.leading)
-        .lineLimit(3)
+      VStack(alignment: .leading, spacing: 1) {
+        Text(toast.message)
+          .font(.subheadline.weight(.semibold))
+          .multilineTextAlignment(.leading)
+          .lineLimit(toast.actions.isEmpty ? 3 : 1)
+        if let detail = toast.detail {
+          Text(verbatim: detail)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+        }
+      }
+      .layoutPriority(1)
+      if !toast.actions.isEmpty {
+        Spacer(minLength: 0)
+        HStack(spacing: Spacing.hairline) {
+          ForEach(toast.actions) { action in
+            actionButton(action)
+          }
+        }
+        .fixedSize()
+      }
     }
     .foregroundStyle(.primary)
-    .padding(.horizontal, Spacing.page)
-    .padding(.vertical, 11)
-    .frame(minHeight: 44)
+    .padding(.leading, Spacing.page)
+    .padding(.trailing, toast.actions.isEmpty ? Spacing.page : 6)
+    .padding(.vertical, toast.actions.isEmpty ? 11 : 6)
+    .frame(minHeight: toast.actions.isEmpty ? 44 : 52)
+    .frame(maxWidth: toast.actions.isEmpty ? nil : .infinity)
+    .background(Palette.toast, in: .capsule(style: .continuous))
     .chromeSurface(in: .capsule(style: .continuous), interactive: false)
     .contentShape(Capsule())
-    .accessibilityElement(children: .combine)
+    .accessibilityElement(children: toast.actions.isEmpty ? .combine : .contain)
     .accessibilityAddTraits(toast.onTap == nil ? .isStaticText : .isButton)
+  }
+
+  @ViewBuilder
+  private func actionButton(_ action: ToastAction) -> some View {
+    if action.isProminent {
+      Button {
+        onAction(action)
+      } label: {
+        Text(action.title)
+          .font(.subheadline.weight(.semibold))
+          .foregroundStyle(.white)
+          .lineLimit(1)
+          .padding(.horizontal, 14)
+          .frame(height: 38)
+          .background(Palette.formAccent, in: .capsule)
+          .contentShape(.capsule)
+      }
+      .buttonStyle(PressableStyle())
+    } else {
+      Button {
+        onAction(action)
+      } label: {
+        Image(systemName: action.symbol)
+          .font(.subheadline.weight(.semibold))
+          .frame(width: 38, height: 38)
+          .background(Color(.tertiarySystemFill), in: .circle)
+          .contentShape(.circle)
+      }
+      .buttonStyle(PressableStyle())
+      .accessibilityLabel(action.title)
+    }
   }
 }
 
@@ -41,12 +95,12 @@ struct ToastOverlay: ViewModifier {
       .overlay(alignment: center.isKeyboardVisible ? .top : .bottom) {
         ZStack {
           if let toast = center.current {
-            ToastView(toast: toast)
-              .padding(.horizontal, Spacing.page * 2)
+            ToastView(toast: toast) { center.perform($0) }
+              .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onInteractiveFrame($0) }
+              .padding(.horizontal, toast.actions.isEmpty ? Spacing.page * 2 : Spacing.page)
               .padding(.bottom, center.isKeyboardVisible ? 0 : clearance())
               .padding(.top, center.isKeyboardVisible ? 4 : 0)
               .offset(y: max(dragOffset, dragOffset / 4))
-              .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onInteractiveFrame($0) }
               .onDisappear { onInteractiveFrame(.null) }
               .gesture(dismissDrag)
               .onTapGesture { center.activate() }

@@ -1,23 +1,37 @@
 import ArdiaSync
 import Foundation
 
+struct ToastAction: Identifiable {
+  let id = UUID()
+  var title: String
+  var symbol: String
+  var isProminent = false
+  var perform: @MainActor () -> Void
+}
+
 struct Toast: Identifiable, Equatable {
   let id: UUID
   var message: String
+  var detail: String?
   var symbol: String
   var duration: Duration
+  var actions: [ToastAction]
   var onTap: (@MainActor () -> Void)?
 
   init(
     _ message: String,
+    detail: String? = nil,
     symbol: String,
     duration: Duration = .seconds(2.4),
+    actions: [ToastAction] = [],
     onTap: (@MainActor () -> Void)? = nil
   ) {
     id = UUID()
     self.message = message
+    self.detail = detail
     self.symbol = symbol
     self.duration = duration
+    self.actions = actions
     self.onTap = onTap
   }
 

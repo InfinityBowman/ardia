@@ -35,12 +35,13 @@ final class ToastCenter {
   }
 
   func show(_ toast: Toast) {
-    if let current, current.message == toast.message {
+    if let current, current.message == toast.message, current.detail == toast.detail, current.actions.isEmpty, toast.actions.isEmpty {
+      self.current?.onTap = toast.onTap
       scheduleDismissal(of: current.id, after: toast.duration)
       return
     }
     current = toast
-    AccessibilityNotification.Announcement(toast.message).post()
+    AccessibilityNotification.Announcement(toast.detail.map { "\(toast.message), \($0)" } ?? toast.message).post()
     scheduleDismissal(of: toast.id, after: toast.duration)
   }
 
@@ -74,6 +75,11 @@ final class ToastCenter {
     let action = current?.onTap
     dismiss()
     action?()
+  }
+
+  func perform(_ action: ToastAction) {
+    dismiss()
+    action.perform()
   }
 
   private func scheduleDismissal(of id: UUID, after duration: Duration) {
