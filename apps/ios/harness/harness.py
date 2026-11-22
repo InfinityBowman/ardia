@@ -8,6 +8,7 @@
   harness.py run <scenario> [...]   Launch, perform the scenario while recording, analyse it
   harness.py analyse <run dir>      Re-run the analysis of an earlier run
   harness.py list                   Scenarios
+  harness.py serve-media [--clip F]  Throttled video server on 127.0.0.1:8766 (video.html, hls.html)
 
 Each run writes runs/<time>-<scenario>/ with video.mp4, probe.jsonl and report.json, and prints
 the report. Nothing here needs a person: the simulator is driven with AXe (real HID touches that do
@@ -36,6 +37,11 @@ APP = os.path.join(DERIVED, "Build/Products/Release-iphonesimulator/Ardia.app")
 RUNS = os.path.join(HERE, "runs")
 PORT = 8765
 FIXTURES = f"http://127.0.0.1:{PORT}/"
+MEDIA_PORT = 8766
+MEDIA = f"http://127.0.0.1:{MEDIA_PORT}/"
+VIDEO_FIXTURES = os.path.join(IOS, "Packages/ArdiaKit/Tests/ArdiaBrowserTests/Fixtures/Video")
+DOWNLOAD_SECONDS = 12
+BUSY_DOWNLOAD_SECONDS = 40
 
 TARGETS = {
     "fall_ms": 450,
@@ -47,6 +53,8 @@ TARGETS = {
     "pager_first_move_ms": 40,
     "pager_settle_ms": 600,
     "misordered": 0,
+    "ring_missing": 0,
+    "ring_show_ms": 150,
 }
 
 CHECKS = {
@@ -54,6 +62,11 @@ CHECKS = {
     "swipe-tabs": ["stall_frames", "flash_frames", "tap_commit_ms", "main_busy_max_ms", "dropped_frames", "pager_first_move_ms", "pager_settle_ms"],
     "swipe-interrupt": ["stall_frames", "flash_frames", "tap_commit_ms", "main_busy_max_ms", "dropped_frames", "pager_settle_ms"],
     "deck-turnback": ["misordered", "tap_commit_ms", "stall_frames", "flash_frames", "dropped_frames"],
+    "download-ring": ["ring_missing", "ring_show_ms"],
+    "download-scroll": ["ring_missing", "stall_frames", "main_busy_max_ms", "dropped_frames"],
+    "idle-scroll": ["stall_frames", "main_busy_max_ms", "dropped_frames"],
+    "download-swipe": ["ring_missing", "stall_frames", "main_busy_max_ms", "dropped_frames", "pager_first_move_ms", "pager_settle_ms"],
+    "idle-swipe": ["stall_frames", "main_busy_max_ms", "dropped_frames", "pager_first_move_ms", "pager_settle_ms"],
 }
 LAUNCH_ARGS = {
     "swipe-interrupt": ["-BrowsePagerScript", "-BrowseDelay", "5"],
@@ -113,6 +126,122 @@ def serve_fixtures():
             time.sleep(0.1)
 
 
+VIDEO_PAGE = """<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Fixture Video</title><body style="margin:0;font:17px -apple-system;background:#fff;color:#222">
+<video src="{src}" poster="/poster.svg" preload="none" controls playsinline style="width:100%;aspect-ratio:16/9;background:#333"></video>
+<main style="padding:16px">{text}</main>"""
+
+
+def media_page(src):
+    text = "".join(f"<p>Paragraph {i}: a long fixture page to scroll while the video downloads.</p>" for i in range(160))
+    return VIDEO_PAGE.format(src=src, text=text).encode()
+
+
+POSTER = ('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><defs><linearGradient id="g" x1="0" x2="1">'
+          '<stop offset="0" stop-color="#ff7a59"/><stop offset="1" stop-color="#6a5cff"/></linearGradient></defs>'
+          '<rect width="320" height="180" fill="url(#g)"/><polygon points="140,60 140,120 190,90" fill="#fff"/></svg>').encode()
+
+
+def serve_media_forever(args):
+    import http.server
+    import urllib.parse
+    clip = args.clip or os.path.join(VIDEO_FIXTURES, "plain/clip.mp4")
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def reply(self, body, kind, code=200, headers=()):
+            self.send_response(code)
+            self.send_header("Content-Type", kind)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            for k, v in headers:
+                self.send_header(k, v)
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+
+        def do_HEAD(self):
+            self.do_GET()
+
+        def do_GET(self):
+            url = urllib.parse.urlparse(self.path)
+            query = dict(urllib.parse.parse_qsl(url.query))
+            seconds = float(query.get("seconds", DOWNLOAD_SECONDS))
+            if url.path == "/video.html":
+                status = f"&status={query['status']}" if "status" in query else ""
+                return self.reply(media_page(f"/clip.mp4?seconds={seconds:g}{status}"), "text/html; charset=utf-8")
+            if url.path == "/hls.html":
+                return self.reply(media_page(f"/hls/master.m3u8?seconds={seconds:g}"), "text/html; charset=utf-8")
+            if url.path == "/poster.svg":
+                return self.reply(POSTER, "image/svg+xml")
+            if url.path == "/clip.mp4":
+                if "status" in query:
+                    return self.reply(b"gone", "text/plain", int(query["status"]))
+                return self.send_throttled(open(clip, "rb").read(), seconds)
+            if url.path.startswith("/hls/"):
+                name = os.path.basename(url.path)
+                path = os.path.join(VIDEO_FIXTURES, "fmp4", name)
+                if not os.path.exists(path):
+                    return self.reply(b"missing", "text/plain", 404)
+                body = open(path, "rb").read()
+                if name.endswith(".m3u8"):
+                    return self.reply(body, "application/vnd.apple.mpegurl")
+                time.sleep(seconds / 6)
+                return self.reply(body, "video/mp4")
+            return self.reply(b"missing", "text/plain", 404)
+
+        def send_throttled(self, body, seconds):
+            start, end = 0, len(body) - 1
+            ranged = self.headers.get("Range", "")
+            if ranged.startswith("bytes="):
+                first, _, last = ranged[6:].partition("-")
+                start = int(first or 0)
+                end = int(last) if last else end
+            part = body[start:end + 1]
+            self.send_response(206 if ranged else 200)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Content-Length", str(len(part)))
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Cache-Control", "no-store")
+            if ranged:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{len(body)}")
+            self.end_headers()
+            if self.command == "HEAD":
+                return
+            if len(part) < len(body) // 4 or self.headers.get("Sec-Fetch-Dest") == "video":
+                self.wfile.write(part)
+                return
+            ticks = max(int(seconds * 20), 1)
+            chunk = max(len(part) // ticks, 1)
+            try:
+                for offset in range(0, len(part), chunk):
+                    self.wfile.write(part[offset:offset + chunk])
+                    self.wfile.flush()
+                    time.sleep(seconds / ticks)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+    http.server.ThreadingHTTPServer(("127.0.0.1", MEDIA_PORT), Handler).serve_forever()
+
+
+def serve_media():
+    with socket.socket() as probe:
+        if probe.connect_ex(("127.0.0.1", MEDIA_PORT)) == 0:
+            return
+    subprocess.Popen([sys.executable, os.path.abspath(__file__), "serve-media"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    for _ in range(50):
+        try:
+            http.client.HTTPConnection("127.0.0.1", MEDIA_PORT, timeout=0.2).request("HEAD", "/poster.svg")
+            return
+        except OSError:
+            time.sleep(0.1)
+
+
 def probe_path(sim):
     container = sh(["xcrun", "simctl", "get_app_container", sim, BUNDLE, "data"]).stdout.strip()
     return os.path.join(container, "Documents/harness/probe.jsonl")
@@ -136,6 +265,8 @@ def read_probe(sim):
 def launch(args, tabs=6, extra=(), launched=None):
     sim = udid()
     serve_fixtures()
+    if any(str(a).startswith(MEDIA) for a in extra):
+        serve_media()
     sh(["xcrun", "simctl", "terminate", sim, BUNDLE], check=False)
     sh(["xcrun", "simctl", "launch", sim, BUNDLE, "-ArdiaDemo", "-ArdiaProbe", "-ArdiaRestingStart",
         "-ArdiaHarnessSeed", FIXTURES, "-ArdiaHarnessTabs", str(tabs), "-BrowseSurface", "browsing", *extra])
@@ -365,7 +496,77 @@ def scenario_page_menu(sim, cycles=2):
     return steps
 
 
+def start_download(sim):
+    more = find(sim, "Page Menu")
+    if not more:
+        sys.exit("no page menu button on screen")
+    tap = f"tap -x {more['x']:.0f} -y {more['y']:.0f}"
+    batch(sim, [tap, "sleep 1.0"])
+    row = find(sim, "Download Video")
+    batch(sim, ["tap -x 200 -y 140", "sleep 0.8"])
+    if not row:
+        sys.exit("no Download Video row in the page menu")
+    return [tap, "sleep 0.8", f"tap -x {row['x']:.0f} -y {row['y']:.0f}"]
+
+
+def scenario_download_ring(sim):
+    """Tap ^, Download Video on a throttled mp4 (~12 s): the ring must show at once, end in a check and clear."""
+    return start_download(sim) + [f"sleep {DOWNLOAD_SECONDS + 5}"]
+
+
+def scroll_steps():
+    down = "swipe --start-x 200 --start-y 650 --end-x 200 --end-y 250 --duration 0.25 --delta 8 --pre-delay 0 --post-delay 0"
+    up = "swipe --start-x 200 --start-y 250 --end-x 200 --end-y 650 --duration 0.25 --delta 8 --pre-delay 0 --post-delay 0"
+    steps = []
+    for _ in range(4):
+        steps += [down, "sleep 0.7"]
+    for _ in range(4):
+        steps += [up, "sleep 0.7"]
+    steps.append("sleep 1.0")
+    return steps
+
+
+TOAST_CLEAR = "sleep 3.5"
+
+
+def open_and_close_menu(sim):
+    more = find(sim, "Page Menu")
+    if not more:
+        sys.exit("no page menu button on screen")
+    batch(sim, [f"tap -x {more['x']:.0f} -y {more['y']:.0f}", "sleep 1.0", "tap -x 200 -y 140", "sleep 0.8",
+                f"tap -x {more['x']:.0f} -y {more['y']:.0f}", "sleep 0.8", "tap -x 200 -y 140", TOAST_CLEAR])
+
+
+def scenario_idle_scroll(sim):
+    """Scroll the video fixture page down and back up with no download running (control for download-scroll)."""
+    open_and_close_menu(sim)
+    return scroll_steps()
+
+
+def scenario_download_scroll(sim):
+    """Start a throttled download, then scroll the page down and up while the ring runs."""
+    batch(sim, start_download(sim) + [TOAST_CLEAR])
+    return scroll_steps()
+
+
+def scenario_idle_swipe(sim):
+    """swipe-tabs on the fixture tabs plus the video tab, no download (control for download-swipe)."""
+    open_and_close_menu(sim)
+    return scenario_swipe_tabs(sim)
+
+
+def scenario_download_swipe(sim):
+    """Start a throttled download, then swipe-tabs along the bar while the ring runs."""
+    batch(sim, start_download(sim) + [TOAST_CLEAR])
+    return scenario_swipe_tabs(sim)
+
+
 SCENARIOS = {
+    "download-ring": scenario_download_ring,
+    "idle-scroll": scenario_idle_scroll,
+    "download-scroll": scenario_download_scroll,
+    "idle-swipe": scenario_idle_swipe,
+    "download-swipe": scenario_download_swipe,
     "search-plus": scenario_search_plus,
     "page-menu": scenario_page_menu,
     "deck-rapid": scenario_deck_rapid,
@@ -380,6 +581,9 @@ SCENARIOS = {
     "deck-turnback": scenario_deck_turnback,
 }
 LAUNCH_ARGS["deck-turnback"] = ["-ArdiaDeck", TURNBACK_SCRIPT]
+LAUNCH_ARGS["download-ring"] = ["-ArdiaHarnessOpen", f"{MEDIA}video.html?seconds={DOWNLOAD_SECONDS}"]
+for _name in ("idle-scroll", "download-scroll", "idle-swipe", "download-swipe"):
+    LAUNCH_ARGS[_name] = ["-ArdiaHarnessOpen", f"{MEDIA}video.html?seconds={BUSY_DOWNLOAD_SECONDS}"]
 
 
 def video_frames(path, w=60, h=130):
@@ -568,9 +772,29 @@ def analyse_probe(events, t0=None):
     }
 
 
+def analyse_ring(events, scenario):
+    marks = [e for e in events if e.get("k") == "m"]
+    ups = [e["t"] for e in events if e.get("k") == "touch" and e.get("phase") == "ended"]
+    shows = [m["t"] for m in marks if m["name"] == "ring.show"]
+    dones = [m["t"] for m in marks if m["name"] == "ring.done"]
+    clears = [m["t"] for m in marks if m["name"] == "ring.clear"]
+    out = {"show": [round(t, 3) for t in shows], "done": [round(t, 3) for t in dones], "clear": [round(t, 3) for t in clears],
+           "finished": sum(1 for m in marks if m["name"] == "download.finished"),
+           "failed": sum(1 for m in marks if m["name"] == "download.failed")}
+    if shows:
+        up = max((t for t in ups if t <= shows[0]), default=None)
+        out["touch_up_to_show_ms"] = round((shows[0] - up) * 1000, 1) if up is not None else None
+    if scenario == "download-ring":
+        out["missing"] = sum([not shows, not (dones and out["finished"]), not (dones and any(c > dones[-1] for c in clears))])
+    elif scenario.startswith("download-"):
+        out["missing"] = (0 if shows else 1) + (0 if not out["failed"] else 1)
+    return out
+
+
 def verdict(report):
     v = report.get("video", {})
     p = report.get("probe", {})
+    ring = report.get("ring", {})
     checks = {
         "fall_ms": (v.get("fall_median_ms"), TARGETS["fall_ms"]),
         "stall_frames": (len(v.get("stalls", [])), TARGETS["stall_frames"]),
@@ -581,6 +805,8 @@ def verdict(report):
         "pager_first_move_ms": (max(p.get("latencies", {}).get("touch->pager.move_ms", []), default=None), TARGETS["pager_first_move_ms"]),
         "pager_settle_ms": (max(p.get("latencies", {}).get("pager.settle->settled_ms", []), default=None), TARGETS["pager_settle_ms"]),
         "misordered": (p.get("misordered"), TARGETS["misordered"]),
+        "ring_missing": (ring.get("missing"), TARGETS["ring_missing"]),
+        "ring_show_ms": (ring.get("touch_up_to_show_ms"), TARGETS["ring_show_ms"]),
     }
     wanted = CHECKS.get(report.get("scenario"), DEFAULT_CHECKS)
     return {k: {"value": val, "target": tgt, "ok": val is not None and val <= tgt} for k, (val, tgt) in checks.items() if k in wanted}
@@ -600,6 +826,8 @@ def summarise(report):
         print(f"    main busy {w['ms']:6.1f} ms at {w['at']}  {', '.join(w['during'])}")
     for key, values in p.get("latencies", {}).items():
         print(f"  {key}: {values}")
+    if report.get("ring", {}).get("show"):
+        print(f"  ring: {report['ring']}")
     for slow in report.get("trace") or []:
         if isinstance(slow, dict) and slow.get("samples"):
             print(f"\n  -- main pass {slow['ms']} ms at {slow['at']} ({slow['samples']} samples)")
@@ -691,6 +919,7 @@ def analyse(args, directory=None, scenario=None):
     t0 = window_start(events, meta)
     report = {"scenario": scenario or meta.get("scenario", "?"), "dir": directory,
               "video": analyse_video(os.path.join(directory, "video.mp4")), "probe": analyse_probe(events, t0)}
+    report["ring"] = analyse_ring(events, report["scenario"])
     report["verdict"] = verdict(report)
     report["trace"] = analyse_trace(directory, events, t0)
     json.dump(report, open(os.path.join(directory, "report.json"), "w"), indent=2)
@@ -764,6 +993,9 @@ def main():
     p = sub.add_parser("analyse")
     p.add_argument("dir")
     p.set_defaults(func=analyse)
+    p = sub.add_parser("serve-media")
+    p.add_argument("--clip", help="mp4 to serve as /clip.mp4 (default: the ArdiaKit fixture clip)")
+    p.set_defaults(func=serve_media_forever)
     sub.add_parser("list").set_defaults(func=lambda a: [print(f"{k:14s} {v.__doc__}") for k, v in SCENARIOS.items()])
     args = parser.parse_args()
     args.func(args)

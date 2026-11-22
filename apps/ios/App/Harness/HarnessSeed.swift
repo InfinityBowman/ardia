@@ -21,6 +21,12 @@ enum HarnessSeed {
       tab.lastActive = now.addingTimeInterval(Double(index - count) * 60)
       last = tab
     }
+    if let extra = value("-ArdiaHarnessOpen").flatMap(URL.init(string:)) {
+      let tab = tabs.open(.url(extra, origin: .typed), selecting: false)
+      tabs.update(tab.id, title: "Fixture Video")
+      tab.lastActive = now.addingTimeInterval(1)
+      last = tab
+    }
     if let last { tabs.select(last.id) }
     try? tabs.context.save()
     HarnessProbe.mark("seed.done", "\(count)")

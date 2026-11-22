@@ -728,3 +728,33 @@ white Wikipedia page:
   switcher and start page show the eyes mark with "You're browsing Incognito" and a line on what isn't
   saved; the search panel keeps its Incognito label and "You're browsing Incognito" while the field is
   empty.
+
+### 6.9 Downloads on the page bar and in the page menu (Ardia's own; Arc Search has no downloads UI)
+
+Arc Search on iPhone shows nothing while a file downloads, so this is Ardia's design, built from the
+pieces measured above. Captures: `runs/downloads-ux/` (git-ignored).
+
+- **Ring on ^**: a 2.5 pt ring sits 1 pt outside the 33.5 pt circle (radius 19.5 to the stroke's centre),
+  starting at 12 o'clock and filling clockwise. The track is the bar glyph colour at 18 %; the arc is the
+  bar glyph colour, so it follows the page tone like the chevron. It shows the combined progress of
+  every running download: bytes over bytes when all sizes are known, otherwise the mean fraction. When
+  any download is still finding its stream (no size, no fraction), a 28 % arc spins once per 0.9 s (with
+  Reduce Motion it pulses instead). It is drawn by Core Animation, read from the downloads at most every
+  100 ms, and each step animates linearly over 120 ms, so SwiftUI never redraws the bar for it. With no
+  download nothing runs and the layers aren't built.
+- **Start**: tapping Download Video shows the spinning ring as the menu closes (1 ms after the touch
+  ends in the harness), before the page scan finishes, plus the "Downloading Video" toast.
+- **End**: when the last download finishes the ring fills, a 33.5 pt green circle with a white check
+  fades in over the chevron in 0.18 s, holds 1.1 s and fades out. Failure and cancel fade the ring out
+  without a check.
+- **Touch and hold ^** (0.45 s) while the ring shows opens Downloads instead of the menu.
+- **Page menu row**: the first row group under the tiles (above Display Options), so the address row still
+  grows out of the + capsule. One download: a 32 pt thumbnail centred 30 pt from the edge, the title at
+  52 pt like the other rows, "27 % · 1.7 MB of 6.2 MB · 20 s left" under it, and a 28 pt stop control
+  (progress ring around a square). Several: "3 downloads · 35 %" over "6.5 MB of 18.7 MB" with a chevron.
+  Finished files nobody has looked at yet follow it (two at most) with **Save to Photos** for videos or
+  **Open** otherwise; closing the menu, opening Downloads or acting on the file counts as looking.
+  Tapping a row opens Downloads.
+- **Completion toast**: "Downloaded" with the file name, a **Save to Photos** (video) or **Open** button
+  and Share, for 5 s, on a solid toast fill. A download that finishes in the background shows its toast
+  when the app comes back (within 10 minutes).
