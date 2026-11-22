@@ -123,11 +123,11 @@ extension HarnessProbe {
     if phase == "began" {
       var view: UIView? = touch.view
       while let current = view, chain.count < 5 {
-        chain.append(String(describing: type(of: current)).prefix(40).description)
+        chain.append(String(NSStringFromClass(type(of: current)).prefix(40)))
         view = current.superview
       }
     }
-    let recognizers = (touch.gestureRecognizers ?? []).filter { !($0 is TouchWatcher) }.map { "\(String(describing: type(of: $0)).prefix(30)):\($0.state.rawValue)" }
+    let recognizers = (touch.gestureRecognizers ?? []).filter { !($0 is TouchWatcher) }.map { "\(NSStringFromClass(type(of: $0)).prefix(30)):\($0.state.rawValue)" }
     append(String(format: "{\"k\":\"touch\",\"t\":%.6f,\"phase\":\"%@\",\"x\":%.0f,\"y\":%.0f,\"view\":\"%@\",\"grs\":\"%@\"}", CACurrentMediaTime(), phase, point.x, point.y, chain.joined(separator: "<"), recognizers.joined(separator: " ")))
   }
 }
@@ -142,12 +142,18 @@ private final class TouchWatcher: UIGestureRecognizer, UIGestureRecognizerDelega
     delaysTouchesEnded = false
     delegate = self
   }
+  private var moved: Set<ObjectIdentifier> = []
   override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) { touches.forEach { handler("began", $0) } }
+  override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+    for touch in touches where moved.insert(ObjectIdentifier(touch)).inserted { handler("moved", touch) }
+  }
   override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
     touches.forEach { handler("ended", $0) }
+    moved.removeAll()
     state = .failed
   }
   override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+    moved.removeAll()
     touches.forEach { handler("cancelled", $0) }
     state = .failed
   }

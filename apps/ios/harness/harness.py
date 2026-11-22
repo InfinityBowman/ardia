@@ -45,11 +45,18 @@ TARGETS = {
     "main_busy_max_ms": 16.7,  # longest main-thread pass: one frame at the simulator's 60 Hz (aim for 8 on a 120 Hz phone)
     "dropped_frames": 0,       # display-link frames the app missed during the scenario
     "tap_commit_ms": 8,        # worst time from a tap to its animation reaching Core Animation
+    "pager_first_move_ms": 40,
+    "pager_settle_ms": 600,
 }
 
 # Which targets each scenario is judged on (round trips only mean something when tapping fast).
 CHECKS = {
     "deck-rapid": ["fall_ms", "tap_commit_ms", "stall_frames", "flash_frames", "main_busy_max_ms", "dropped_frames"],
+    "swipe-tabs": ["stall_frames", "flash_frames", "tap_commit_ms", "main_busy_max_ms", "dropped_frames", "pager_first_move_ms", "pager_settle_ms"],
+    "swipe-interrupt": ["stall_frames", "flash_frames", "tap_commit_ms", "main_busy_max_ms", "dropped_frames", "pager_settle_ms"],
+}
+LAUNCH_ARGS = {
+    "swipe-interrupt": ["-BrowsePagerScript", "-BrowseDelay", "5"],
 }
 DEFAULT_CHECKS = ["stall_frames", "flash_frames", "tap_commit_ms", "main_busy_max_ms", "dropped_frames"]
 
@@ -128,7 +135,7 @@ def read_probe(sim):
     return out
 
 
-def launch(args, tabs=6, extra=()):
+def launch(args, tabs=6, extra=(), launched=None):
     sim = udid()
     serve_fixtures()
     sh(["xcrun", "simctl", "terminate", sim, BUNDLE], check=False)
@@ -139,7 +146,10 @@ def launch(args, tabs=6, extra=()):
         if any(e.get("name") == "seed.done" for e in read_probe(sim) if e.get("k") == "m"):
             break
         time.sleep(0.2)
-    time.sleep(2.5)  # let the selected page load and paint
+    settled = time.time() + 2.5
+    if launched:
+        launched(sim)
+    time.sleep(max(0, settled - time.time()))  # let the selected page load and paint
     return sim
 
 
@@ -221,16 +231,25 @@ def scenario_deck_settled(sim, cycles=4):
     return scenario_deck_rapid(sim, cycles=cycles, out_gap=0.9, back_gap=0.9)
 
 
-def scenario_swipe_tabs(sim, swipes=6):
-    """Swipe sideways along the bottom bar to step between tabs."""
+def scenario_swipe_tabs(sim):
+    """Swipe along the bottom bar between tabs, back and forth, then into the end of the order (rubber band)."""
     tabs = find(sim, "Tabs")
     y = tabs["y"] if tabs else 820
+    flick = "--duration 0.12 --delta 6 --pre-delay 0 --post-delay 0"
+    back = f"swipe --start-x 100 --start-y {y:.0f} --end-x 300 --end-y {y:.0f} {flick}"
+    forward = f"swipe --start-x 300 --start-y {y:.0f} --end-x 100 --end-y {y:.0f} {flick}"
     steps = []
-    for i in range(swipes):
-        a, b = (300, 100) if i % 2 == 0 else (100, 300)
-        steps += [f"swipe --start-x {a} --start-y {y:.0f} --end-x {b} --end-y {y:.0f} --duration 0.12", "sleep 0.5"]
+    for _ in range(3):
+        steps += [back, "sleep 0.6"]
+    for _ in range(5):
+        steps += [forward, "sleep 0.6"]
     steps.append("sleep 1.0")
     return steps
+
+
+def scenario_swipe_interrupt(sim):
+    """The app's scripted pager run: a cancelled drag, a flick, a flick caught 120 ms into its settle and reversed (AXe cannot touch again that soon)."""
+    return ["sleep 7.5"]
 
 
 def scenario_deck_switch(sim, switches=4):
@@ -318,6 +337,7 @@ SCENARIOS = {
     "deck-interrupt": scenario_deck_interrupt,
     "deck-settled": scenario_deck_settled,
     "swipe-tabs": scenario_swipe_tabs,
+    "swipe-interrupt": scenario_swipe_interrupt,
     "deck-switch": scenario_deck_switch,
     "search-toggle": scenario_search_toggle,
 }
@@ -466,6 +486,33 @@ def analyse_probe(events, t0=None):
     pair("deck.cardTap", "deck.closed", "deck.cardTap->deck.closed_ms")
     pair("deck.cardTap", "openTab", "deck.cardTap->openTab_ms")
     pair("deck.return", "openTab", "deck.return->openTab_ms")
+    touches = [e["t"] for e in events if e.get("k") == "touch" and e.get("phase") == "began"]
+    first_moves = []
+    for m in marks:
+        if m["name"] == "pager.move":
+            down = max((t for t in touches if t <= m["t"]), default=None)
+            if down is not None:
+                first_moves.append(round((m["t"] - down) * 1000, 1))
+    if first_moves:
+        latencies["touch->pager.move_ms"] = first_moves
+    finger = [e["t"] for e in events if e.get("k") == "touch" and e.get("phase") == "moved"]
+    follow = []
+    for m in marks:
+        if m["name"] == "pager.move":
+            moved = max((t for t in finger if t <= m["t"]), default=None)
+            if moved is not None:
+                follow.append(round((m["t"] - moved) * 1000, 1))
+    if follow:
+        latencies["finger.move->pager.move_ms"] = follow
+    settles = []
+    for i, m in enumerate(marks):
+        if m["name"] != "pager.settle":
+            continue
+        nxt = next((n for n in marks[i + 1:] if n["name"] in ("pager.settled", "pager.catch", "pager.settle")), None)
+        if nxt and nxt["name"] == "pager.settled":
+            settles.append(round((nxt["t"] - m["t"]) * 1000, 1))
+    if settles:
+        latencies["pager.settle->settled_ms"] = settles
     return {
         "display_fps": fps,
         "dropped_frames": dropped,
@@ -488,6 +535,8 @@ def verdict(report):
         "main_busy_max_ms": (p.get("main_busy_max_ms"), TARGETS["main_busy_max_ms"]),
         "dropped_frames": (p.get("dropped_frames"), TARGETS["dropped_frames"]),
         "tap_commit_ms": (max([v for k, vs in p.get("latencies", {}).items() if k.endswith("->commit_ms") for v in vs], default=None), TARGETS["tap_commit_ms"]),
+        "pager_first_move_ms": (max(p.get("latencies", {}).get("touch->pager.move_ms", []), default=None), TARGETS["pager_first_move_ms"]),
+        "pager_settle_ms": (max(p.get("latencies", {}).get("pager.settle->settled_ms", []), default=None), TARGETS["pager_settle_ms"]),
     }
     wanted = CHECKS.get(report.get("scenario"), DEFAULT_CHECKS)
     return {k: {"value": val, "target": tgt, "ok": val is not None and val <= tgt} for k, (val, tgt) in checks.items() if k in wanted}
@@ -610,23 +659,28 @@ def analyse(args, directory=None, scenario=None):
 def run(args):
     if args.scenario not in SCENARIOS:
         sys.exit(f"unknown scenario; choose from {', '.join(SCENARIOS)}")
-    sim = launch(args, tabs=args.tabs)
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     directory = os.path.join(RUNS, f"{stamp}-{args.scenario}")
     os.makedirs(directory, exist_ok=True)
+    tracers = []
+
+    def start_tracer(sim):
+        listing = sh(["xcrun", "simctl", "spawn", sim, "launchctl", "list"]).stdout
+        pid = next((line.split()[0] for line in listing.splitlines() if BUNDLE in line and line.split()[0].isdigit()), None)
+        if pid:
+            tracers.append(subprocess.Popen(["xcrun", "xctrace", "record", "--template", "Time Profiler", "--device", sim,
+                                             "--attach", pid, "--output", os.path.join(directory, "trace.trace")],
+                                            stdout=open(os.path.join(directory, "trace.log"), "w"), stderr=subprocess.STDOUT))
+            deadline = time.time() + 8
+            while time.time() < deadline and "Ctrl-C" not in open(os.path.join(directory, "trace.log")).read():
+                time.sleep(0.1)
+
+    sim = launch(args, tabs=args.tabs, extra=LAUNCH_ARGS.get(args.scenario, ()), launched=start_tracer if args.trace else None)
     steps = SCENARIOS[args.scenario](sim)
     video = os.path.join(directory, "video.mp4")
     recorder = subprocess.Popen(["xcrun", "simctl", "io", sim, "recordVideo", "--codec=h264", "--force", video],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    tracer = None
-    if args.trace:
-        pid = sh(["xcrun", "simctl", "spawn", sim, "launchctl", "list"]).stdout
-        pid = next((line.split()[0] for line in pid.splitlines() if BUNDLE in line and line.split()[0].isdigit()), None)
-        if pid:
-            tracer = subprocess.Popen(["xcrun", "xctrace", "record", "--template", "Time Profiler", "--device", sim,
-                                       "--attach", pid, "--output", os.path.join(directory, "trace.trace")],
-                                      stdout=open(os.path.join(directory, "trace.log"), "w"), stderr=subprocess.STDOUT)
-            time.sleep(3.0)
+    tracer = tracers[0] if tracers else None
     time.sleep(1.0)
     began = time.time()
     batch(sim, steps)

@@ -9,9 +9,8 @@ struct BrowsingView: View {
   @Environment(AppModel.self) private var app
   @Environment(\.profileLook) private var look
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @State private var pager = PagerModel()
+  @State private var pager = TabPager()
   @State private var barVisibility = BottomBarVisibility()
-  @State private var tabSwitchTicks = 0
   @State private var pageSpan = PageSpan(width: 402, safeSide: 0)
   @State private var storedCover: StoredCover?
   @Environment(\.screenLayout) private var screenLayout
@@ -24,13 +23,12 @@ struct BrowsingView: View {
       if let tab {
         pageLayer(tab)
           .overlay(alignment: .top) { statusStrip(tab) }
-          .opacity(pager.isActive ? 0 : 1)
           .padding(columnEdge, screenLayout.column?.contentReserve ?? 0)
           .ignoresSafeArea()
-        if pager.isActive {
-          PagerStage(pager: pager, reduceMotion: reduceMotion)
-        }
       }
+      TabPagerStageHost(pager: pager, app: app)
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
       if let column = screenLayout.column {
         columnBar(column)
       } else if screenLayout == .phone {
@@ -95,10 +93,10 @@ struct BrowsingView: View {
       barVisibility.expand()
       app.goBackToSearchIfEmpty()
       if let id { _ = app.web.webTab(for: id) }
-      warmPagerNeighbors()
+      pager.selectionChanged()
     }
-    .task { await freezePagerForDemo() }
-    .task { await runPagerScriptForDemo() }
+    .task { await pager.runDemoFreeze() }
+    .task { await pager.runDemoScript() }
     .onChange(of: isFront) { _, front in
       if front { barVisibility.expand() }
     }
@@ -110,10 +108,8 @@ struct BrowsingView: View {
     }
     .toolbarColorScheme(isFront ? statusScheme : nil, for: .statusBar)
     .accessibilityHidden(!isFront)
-    .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: tabSwitchTicks)
   }
 
-  private var pageWidth: CGFloat { pageSpan.width }
 
   private var isFindingInPage: Bool {
     currentWebPage?.isFindingInPage ?? false
@@ -220,13 +216,13 @@ struct BrowsingView: View {
 
   private var barActions: BarActions {
     BarActions(
-      onTabs: openDeck,
-      onAddress: editAddress,
-      onPlus: openSearch,
-      onMore: { app.browse.isToolbarPresented = true },
+      onTabs: { pager.landNow(); openDeck() },
+      onAddress: { pager.landNow(); editAddress() },
+      onPlus: { pager.landNow(); openSearch() },
+      onMore: { pager.landNow(); app.browse.isToolbarPresented = true },
       onExpand: { withAnimation(barMotion) { barVisibility.expand() } },
       onStep: stepTab,
-      onSelectTab: { id in switchTab(to: id, order: swipeOrder) },
+      onSelectTab: { id in switchTab(to: id, order: app.swipeOrder) },
       onCloseTab: closeCurrentTab
     )
   }
@@ -261,7 +257,7 @@ struct BrowsingView: View {
     )
     .padding(.bottom, BrowseLayout.barBottomGap)
     .environment(\.colorScheme, barScheme)
-    .highPriorityGesture(pagerGesture)
+    .gesture(TabPagerPan(pager: pager))
     .offset(y: isBarShown ? 0 : BrowseLayout.barCollapseTravel)
     .opacity(isBarShown ? 1 : 0)
     .allowsHitTesting(isBarShown)
@@ -307,154 +303,6 @@ struct BrowsingView: View {
     app.newTab()
   }
 
-  private var pagerGesture: some Gesture {
-    DragGesture(minimumDistance: 14)
-      .onChanged { value in
-        if !pager.isTracking {
-          guard abs(value.translation.width) > abs(value.translation.height) else { return }
-          if pager.isActive {
-            pager.catchSettle()
-          } else {
-            guard pager.begin(order: swipeOrder, currentID: app.tabs.selectedTabID) else { return }
-            rememberCurrentCover()
-          }
-          pager.isTracking = true
-          pager.trackingBase = rawOffset(for: pager.offset)
-          pager.activationTranslation = value.translation.width
-        }
-        let raw = pager.trackingBase + value.translation.width - pager.activationTranslation
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-          pager.offset = PagerPhysics.resolvedOffset(raw, hasLeft: pager.hasLeft, hasRight: pager.hasRight, width: pageWidth)
-        }
-      }
-      .onEnded { value in
-        guard pager.isTracking else { return }
-        pager.isTracking = false
-        let width = pageWidth
-        let velocity = value.velocity.width
-        let target = PagerPhysics.snapTarget(offset: pager.offset, velocity: velocity, width: width, hasLeft: pager.hasLeft, hasRight: pager.hasRight)
-        settlePager(to: target, velocity: velocity, width: width)
-      }
-  }
-
-  private func rawOffset(for offset: CGFloat) -> CGFloat {
-    if offset > 0, !pager.hasLeft { return offset / max(1 - offset / PagerPhysics.rubberLimit, 0.05) }
-    if offset < 0, !pager.hasRight { return offset / max(1 + offset / PagerPhysics.rubberLimit, 0.05) }
-    return offset
-  }
-
-  private func settlePager(to target: Int, velocity: CGFloat, width: CGFloat) {
-    let destination = CGFloat(target) * width
-    let neighbor = target > 0 ? pager.left : target < 0 ? pager.right : nil
-    let from = pager.offset
-    let distance = destination - from
-    pager.generation += 1
-    let generation = pager.generation
-    if neighbor != nil { tabSwitchTicks += 1 }
-    let animation: Animation
-    if reduceMotion {
-      animation = Motion.pagerFade
-      pager.settle = nil
-    } else {
-      let releaseVelocity = min(max(velocity, -4000), 4000)
-      animation = .interpolatingSpring(Motion.pagerSettle, initialVelocity: abs(distance) > 0.5 ? Double(releaseVelocity / distance) : 0)
-      pager.settle = PagerModel.Settle(from: from, to: destination, velocity: releaseVelocity, start: CACurrentMediaTime())
-    }
-    withAnimation(animation, completionCriteria: .removed) {
-      pager.offset = destination
-    } completion: {
-      guard pager.generation == generation, !pager.isTracking else { return }
-      guard let neighbor else {
-        pager.reset()
-        return
-      }
-      var transaction = Transaction()
-      transaction.disablesAnimations = true
-      withTransaction(transaction) {
-        app.browse.freezeOrder(pager.order.map(\.id))
-        app.openTab(neighbor.id)
-        pager.reset()
-      }
-    }
-  }
-
-  private func warmPagerNeighbors() {
-    let order = swipeOrder
-    guard let index = order.firstIndex(where: { $0.id == app.tabs.selectedTabID }) else { return }
-    let neighbors = [index - 1, index + 1].filter(order.indices.contains).map { order[$0] }
-    let keep = Set(neighbors.map(\.id))
-    pager.images = pager.images.filter { keep.contains($0.key) }
-    for tab in neighbors where pager.images[tab.id] == nil && app.browse.covers.image(for: tab.id) == nil && app.deck.memoryImage(for: tab.id) == nil {
-      guard let name = tab.snapshotFileName else { continue }
-      let id = tab.id
-      Task {
-        guard let image = await app.web.snapshots.image(named: name) else { return }
-        pager.images[id] = UIImage(cgImage: image)
-      }
-    }
-  }
-
-  private func runPagerScriptForDemo() async {
-    guard MotionDemo.pagerScript else { return }
-    try? await Task.sleep(for: .seconds(MotionDemo.delay))
-    func drag(to fraction: CGFloat, over seconds: Double) async {
-      let start = pager.offset
-      let steps = max(Int(seconds * 120), 1)
-      for step in 1...steps {
-        let t = CGFloat(step) / CGFloat(steps)
-        let raw = rawOffset(for: start) + (fraction * pageWidth - rawOffset(for: start)) * t
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-          pager.offset = PagerPhysics.resolvedOffset(raw, hasLeft: pager.hasLeft, hasRight: pager.hasRight, width: pageWidth)
-        }
-        try? await Task.sleep(for: .milliseconds(8))
-      }
-    }
-    func grab() -> Bool {
-      if pager.isActive {
-        pager.catchSettle()
-        return true
-      }
-      rememberCurrentCover()
-      return pager.begin(order: swipeOrder, currentID: app.tabs.selectedTabID)
-    }
-    guard grab() else { return }
-    await drag(to: 0.25, over: 0.3)
-    settlePager(to: 0, velocity: 0, width: pageWidth)
-    try? await Task.sleep(for: .seconds(1.2))
-    guard grab() else { return }
-    await drag(to: -0.3, over: 0.25)
-    settlePager(to: PagerPhysics.snapTarget(offset: pager.offset, velocity: -1400, width: pageWidth, hasLeft: pager.hasLeft, hasRight: pager.hasRight), velocity: -1400, width: pageWidth)
-    try? await Task.sleep(for: .seconds(1.5))
-    guard grab() else { return }
-    await drag(to: 0.3, over: 0.25)
-    settlePager(to: 1, velocity: 1400, width: pageWidth)
-    try? await Task.sleep(for: .milliseconds(120))
-    guard grab() else { return }
-    await drag(to: 0.1, over: 0.2)
-    settlePager(to: 0, velocity: -300, width: pageWidth)
-  }
-
-  private func freezePagerForDemo() async {
-    guard let fraction = MotionDemo.pagerFreeze else { return }
-    try? await Task.sleep(for: .seconds(MotionDemo.delay))
-    rememberCurrentCover()
-    guard pager.begin(order: swipeOrder, currentID: app.tabs.selectedTabID) else { return }
-    pager.offset = PagerPhysics.resolvedOffset(-fraction * pageWidth, hasLeft: pager.hasLeft, hasRight: pager.hasRight, width: pageWidth)
-  }
-
-  private var swipeOrder: [BrowserTab] {
-    let current = app.deckOrder
-    guard let frozen = app.browse.frozenOrder else { return current }
-    let byID = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
-    let kept = frozen.compactMap { byID[$0] }
-    let added = current.filter { !frozen.contains($0.id) }
-    return kept + added
-  }
-
   private func switchTab(to id: UUID, order: [BrowserTab]) {
     rememberCurrentCover()
     app.browse.freezeOrder(order.map(\.id))
@@ -467,7 +315,7 @@ struct BrowsingView: View {
   }
 
   private func stepTab(_ delta: Int) {
-    let order = swipeOrder
+    let order = app.swipeOrder
     guard let index = order.firstIndex(where: { $0.id == app.tabs.selectedTabID }), order.indices.contains(index + delta) else { return }
     switchTab(to: order[index + delta].id, order: order)
   }

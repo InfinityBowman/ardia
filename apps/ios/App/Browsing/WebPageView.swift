@@ -59,7 +59,7 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   var backdrop: Color = ProfileLook.plum.surface {
     didSet { backgroundColor = UIColor(backdrop) }
   }
-  private var placeholderHost: UIHostingController<PageLoadingPlaceholder>?
+  private var placeholderHost: UIViewController?
   private weak var page: WebTab?
   private weak var webView: WKWebView?
   private let refreshControl = UIRefreshControl()
@@ -341,7 +341,7 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
     guard let tab = placeholderTab else { return }
     placeholderHost?.view.layer.removeAllAnimations()
     placeholderHost?.view.removeFromSuperview()
-    let host = UIHostingController(rootView: PageLoadingPlaceholder(tab: tab, backdrop: backdrop, revealDelay: Motion.placeholderDelay))
+    let host: UIViewController = PagePlaceholderPool.shared.take(tab.id) ?? UIHostingController(rootView: PageLoadingPlaceholder(tab: tab, backdrop: backdrop, revealDelay: Motion.placeholderDelay))
     host.view.isUserInteractionEnabled = false
     host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     host.view.frame = bounds
