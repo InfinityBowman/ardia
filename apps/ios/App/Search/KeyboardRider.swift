@@ -16,7 +16,6 @@ struct RiderGrowth: Equatable {
   var font: UIFont
   var panelFill: UIColor
   var panelBlurs: Bool
-  var panelEdge: UIColor
   var panelRadius: CGFloat
   var fieldFill: UIColor
   var fieldEdge: UIColor
@@ -122,9 +121,6 @@ private final class PanelMaterialView: UIView {
     }
     if tint.backgroundColor != growth.panelFill { tint.backgroundColor = growth.panelFill }
     if layer.cornerRadius != growth.panelRadius { layer.cornerRadius = growth.panelRadius }
-    let edge = growth.panelEdge.cgColor
-    if layer.borderColor != edge { layer.borderColor = edge }
-    layer.borderWidth = 1 / max(traitCollection.displayScale, 1)
   }
 }
 
@@ -332,9 +328,9 @@ final class KeyboardRiderController: UIViewController {
   static let dragHandover: TimeInterval = 0.04
   static let previewHold: TimeInterval = 0.3
   static let previewFade: TimeInterval = 0.1
-  static let dragWall: CGFloat = 0.6
+  static let dragWall: CGFloat = 0.65
   static let dragRubberSlope: CGFloat = 0.55
-  static let dragRubberSpan: CGFloat = 0.35
+  static let dragRubberSpan: CGFloat = 0.31
   static let dragReverse: CGFloat = 150
   static let dragReverseDistance: CGFloat = 12
   static let recessionClose: Double = 0.26
@@ -361,6 +357,9 @@ final class KeyboardRiderController: UIViewController {
     bandHost.view.backgroundColor = .clear
     bandHost.view.isUserInteractionEnabled = false
     bandHost.view.alpha = 0
+    bandHost.view.clipsToBounds = true
+    bandHost.view.layer.cornerCurve = .continuous
+    bandHost.view.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
     if #available(iOS 16.4, *) { bandHost.safeAreaRegions = [] }
     riser.addSubview(bandHost.view)
     bandHost.didMove(toParent: self)
@@ -515,7 +514,10 @@ final class KeyboardRiderController: UIViewController {
 
   func update(content: AnyView, holdsLift: Bool, dragOffset: CGFloat, isVisible visible: Bool, isInteractive: Bool, growth: RiderGrowth, animatesDrag: Bool) {
     host.rootView = content
-    if self.growth != growth { material.configure(growth) }
+    if self.growth != growth {
+      material.configure(growth)
+      bandHost.view.layer.cornerRadius = growth.panelRadius
+    }
     self.growth = growth
     let iconsFrame = CGRect(x: 0, y: 0, width: view.bounds.width, height: growth.bandAboveBottom)
     if iconsHost.view.frame != iconsFrame { iconsHost.view.frame = iconsFrame }
@@ -910,7 +912,7 @@ final class KeyboardRiderController: UIViewController {
     mountPreview()
     previewHost.view.layer.removeAllAnimations()
     previewHost.view.frame = body.bounds
-    let rowsTop = growth.fieldTop + growth.fieldHeight
+    let rowsTop = growth.fieldTop + growth.fieldHeight + BrowseLayout.sheetRowsGap / 2
     previewMask.frame = CGRect(x: 0, y: rowsTop, width: body.bounds.width, height: max(body.bounds.height - rowsTop, 0))
     previewHost.view.layoutIfNeeded()
   }

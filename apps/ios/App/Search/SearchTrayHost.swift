@@ -174,7 +174,6 @@ struct SearchTrayHost: View {
       font: PanelColors.font(for: dynamicTypeSize),
       panelFill: colors.panelFill,
       panelBlurs: colors.panelBlurs,
-      panelEdge: colors.panelEdge,
       panelRadius: BrowseLayout.sheetPanelRadius,
       fieldFill: colors.fieldFill,
       fieldEdge: colors.fieldEdge,
@@ -357,7 +356,6 @@ struct SearchTrayHost: View {
 private struct PanelColors {
   let panelFill: UIColor
   let panelBlurs: Bool
-  let panelEdge: UIColor
   let fieldFill: UIColor
   let fieldEdge: UIColor
   let glyph: UIColor
@@ -382,7 +380,6 @@ private struct PanelColors {
     let colors = PanelColors(
       panelFill: resolve(fill),
       panelBlurs: blurs,
-      panelEdge: resolve(SearchPanelPalette.edge),
       fieldFill: resolve(incognito ? SearchPanelPalette.incognitoField : SearchPanelPalette.field),
       fieldEdge: resolve(SearchPanelPalette.fieldEdge),
       glyph: UIColor(BrowsePalette.barGlyph).resolvedColor(with: barTraits),

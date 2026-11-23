@@ -747,10 +747,12 @@ system keyboard both apps get the system's slide.
 - Swipe up on the bar: the riser appears at the bar line with the + tile, and the search material and a
   preview of the empty-field suggestion rows fade in over 60 ms with the tabs button and ^ fading out. The
   preview is a non-interactive `SearchTray` for an empty `.page` request in its own hosting view, masked
-  below the field so no field shows. The + rides the finger 1 : 1 until it is 60 % of the screen height
-  from the top. Past that it follows a rubber band, `span · (1 − 1 / (x · 0.55 / span + 1))` with
-  span = 0.35 × screen height, so it creeps from ≈ 524 to ≈ 386 as the finger reaches the top, whatever
-  keyboard height is remembered (checked with none, 40, 216 and 336 pt). The dim and the page card follow
+  below the field (and the field's bottom edge) so no field or line shows. The + rides the finger 1 : 1
+  until it is 65 % of the screen height from the top (moved down from 60 % at the owner's request). Past
+  that it follows a rubber band, `span · (1 − 1 / (x · 0.55 / span + 1))` with span = 0.31 × screen
+  height, so it creeps from ≈ 568 to ≈ 431 as the finger reaches the top, whatever keyboard height is
+  remembered (checked with none, 40, 216 and 336 pt). The panel material has no edge line, and the bar
+  band under it is clipped to the same rounded top corners, so nothing shows in the corners' curve. The dim and the page card follow
   the drag (the card is fully receded at 160 pt of travel). On release it opens if the bar's swipe commits
   (28 pt or a flick). The + tile turns into the field in place with "Search…" and the caret, and widens
   on the 0.25 s spring. The panel springs to its place above the keyboard on the 0.30 s spring, launched

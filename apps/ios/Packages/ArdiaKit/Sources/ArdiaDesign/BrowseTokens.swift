@@ -50,7 +50,6 @@ public enum SearchPanelPalette {
   public static let materialTint = Color(hex: 0x2B2A2D)
   public static let materialTintShare: Double = 0.63
   public static let incognitoFill = Color(hex: 0x151517)
-  public static let edge = Color.adaptive(light: .black.opacity(0.06), dark: .white.opacity(0.24))
   public static let field = Color.adaptive(light: Color(hex: 0xD1D2D2), dark: .white.opacity(0.12))
   public static let incognitoField = Color(hex: 0x2C2C2F)
   public static let fieldEdge = Color.adaptive(light: .black.opacity(0.05), dark: .white.opacity(0.17))
