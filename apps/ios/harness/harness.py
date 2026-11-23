@@ -516,7 +516,7 @@ SURFACES_SCRIPT = ",".join(["wait:8", "switcher", "wait:1", "archive", "wait:1.2
 
 def scenario_deck_surfaces(sim):
     """In-app script: switcher, Archive up and down, back to the page, Incognito's switcher, the empty switcher, the start page."""
-    return ["sleep 16"]
+    return ["sleep 21"]
 
 
 def held_drag(x0, x1, y, hold):
@@ -989,7 +989,7 @@ def run(args):
         pid = next((line.split()[0] for line in listing.splitlines() if BUNDLE in line and line.split()[0].isdigit()), None)
         if pid:
             tracers.append(subprocess.Popen(["xcrun", "xctrace", "record", "--template", "Time Profiler", "--device", sim,
-                                             "--attach", "Ardia", "--output", os.path.join(directory, "trace.trace")],
+                                             "--attach", pid, "--output", os.path.join(directory, "trace.trace")],
                                             stdout=open(os.path.join(directory, "trace.log"), "w"), stderr=subprocess.STDOUT))
             deadline = time.time() + 8
             while time.time() < deadline and "Ctrl-C" not in open(os.path.join(directory, "trace.log")).read():
