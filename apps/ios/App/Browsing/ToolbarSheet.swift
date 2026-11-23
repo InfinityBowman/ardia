@@ -22,6 +22,7 @@ struct ToolbarSheet: View {
   @State private var contentHeight: CGFloat = 560
   @State private var fitsPanel = true
   @State private var bottomInset: CGFloat = 0
+  @State private var addressFrame: CGRect?
   @State private var windowRoom: CGFloat = .greatestFiniteMagnitude
   @State private var followUp: PendingFollowUp?
   @AppStorage("pageMenu.displayOptionsExpanded") private var showsDisplay = false
@@ -39,6 +40,7 @@ struct ToolbarSheet: View {
       VStack(spacing: 0) {
         VStack(spacing: PageMenuLayout.barSpacing) {
           navigationCapsule
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { addressFrame = $0 }
           actionButtons
             .modifier(PageMenuContentFade())
         }
@@ -469,6 +471,7 @@ struct ToolbarSheet: View {
     guard let tab else { return }
     let text = app.currentQuery(for: tab)
     leave()
+    SearchMotion.source = addressFrame
     app.browse.presentSearch(from: .page, text: text, selectsAll: true)
   }
 }

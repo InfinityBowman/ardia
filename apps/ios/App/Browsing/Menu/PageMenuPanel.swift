@@ -16,6 +16,7 @@ struct PageMenuPanel: View {
   @State private var panelFills = false
   @State private var generation = 0
   @State private var riders: Double = 0
+  @State private var handOff: Double = 1
   @ScaledMetric(relativeTo: .body) private var capsuleHeight: CGFloat = PageMenuLayout.addressHeight
 
   var body: some View {
@@ -38,7 +39,7 @@ struct PageMenuPanel: View {
             }
             .offset(y: (1 - rise) * travel + drag)
             .environment(\.pageMenuRise, rise)
-            .opacity(isShown ? 1 : 0)
+            .opacity(isShown ? handOff : 0)
             .allowsHitTesting(isShown)
             .accessibilityHidden(!isShown)
             .accessibilityAddTraits(.isModal)
@@ -147,6 +148,7 @@ struct PageMenuPanel: View {
         riders = 1
       }
       isMounted = true
+      handOff = 1
       shownID = id
       app.browse.pageMenuCarriesBarControls = true
       drag = 0
@@ -171,6 +173,10 @@ struct PageMenuPanel: View {
     guard shownID != nil else { return }
     HarnessProbe.mark("menu.close")
     let closing = generation
+    if app.browse.search != nil, !reduceMotion {
+      handToSearch(closing)
+      return
+    }
     withAnimation(PageMenuLayout.dimClear) { dimmed = false }
     withAnimation(reduceMotion ? Motion.surfaceFade : PageMenuLayout.ridersArrive) { riders = 1 }
     withAnimation(reduceMotion ? Motion.surfaceFade : PageMenuLayout.close) {
@@ -181,6 +187,29 @@ struct PageMenuPanel: View {
       shownID = nil
       app.browse.pageMenuCarriesBarControls = false
       drag = 0
+    }
+  }
+}
+
+extension PageMenuPanel {
+  private static let handOffFade = Animation.easeOut(duration: 0.1)
+
+  private func handToSearch(_ closing: Int) {
+    withAnimation(Self.handOffFade) {
+      dimmed = false
+      handOff = 0
+    } completion: {
+      guard closing == generation, !app.browse.isToolbarPresented else { return }
+      var instant = Transaction()
+      instant.disablesAnimations = true
+      withTransaction(instant) {
+        shownID = nil
+        app.browse.pageMenuCarriesBarControls = false
+        rise = 0
+        riders = 1
+        drag = 0
+        handOff = 1
+      }
     }
   }
 }

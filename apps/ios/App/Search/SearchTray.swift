@@ -29,6 +29,7 @@ struct SearchTray<Drag: Gesture>: View {
   @State private var headerHeight: CGFloat = 0
   @State private var naturalRowsHeight: CGFloat = 0
   @State private var isSubmitting = false
+  @State private var showsIdleRows = false
   @ScaledMetric(relativeTo: .title3) private var fieldHeight = BrowseLayout.searchFieldHeight
   @ScaledMetric(relativeTo: .body) private var placeholderSize: CGFloat = 17
 
@@ -49,6 +50,8 @@ struct SearchTray<Drag: Gesture>: View {
     .onDisappear { model?.cancel() }
     .onChange(of: text) { _, newValue in
       guard !isSubmitting else { return }
+      if showsIdleRows, newValue == request.initialText { return }
+      showsIdleRows = false
       model?.update(newValue)
       highlightedID = nil
     }
@@ -382,8 +385,9 @@ struct SearchTray<Drag: Gesture>: View {
 
   private func start() {
     if model == nil { rebuildModel() }
+    showsIdleRows = request.selectsAll && !request.initialText.isEmpty
     text = request.initialText
-    model?.update(request.initialText)
+    model?.update(showsIdleRows ? "" : request.initialText)
     if mayFocus { isFocused = true }
   }
 
@@ -394,7 +398,7 @@ struct SearchTray<Drag: Gesture>: View {
   private func rebuildModel() {
     let fresh = app.makeSuggestionsModel()
     model = fresh
-    fresh.update(text)
+    fresh.update(showsIdleRows ? "" : text)
     Task { await fresh.prepare() }
   }
 

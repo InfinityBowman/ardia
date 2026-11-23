@@ -237,9 +237,12 @@ final class FieldMorphView: UIView {
 @MainActor
 enum SearchMotion {
   static weak var rider: KeyboardRiderController?
+  static var source: CGRect?
 
   static func begin(_ request: BrowseSession.SearchRequest) {
-    rider?.prime(initialText: request.initialText, dims: request.origin == .page)
+    let from = source
+    source = nil
+    rider?.prime(initialText: request.initialText, dims: request.origin == .page, from: from)
   }
 
   static func end() {
@@ -291,6 +294,8 @@ final class KeyboardRiderController: UIViewController {
   private var isDraggingOpen = false
   private var launchVelocity: CGFloat = 0
   private var opensFromDrag = false
+  private var openSource: CGRect?
+  private var hasPreview = false
   private var dragPeak: CGFloat = 0
   private var isMorphing = false
   nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
@@ -325,7 +330,7 @@ final class KeyboardRiderController: UIViewController {
   static let pendingLimit: TimeInterval = 0.6
   static let dragIconsFade: TimeInterval = 0.06
   static let dragHandover: TimeInterval = 0.04
-  static let previewHold: TimeInterval = 0.15
+  static let previewHold: TimeInterval = 0.3
   static let previewFade: TimeInterval = 0.1
   static let dragWall: CGFloat = 0.6
   static let dragRubberSlope: CGFloat = 0.55
@@ -371,7 +376,7 @@ final class KeyboardRiderController: UIViewController {
     addChild(previewHost)
     previewHost.view.backgroundColor = .clear
     previewHost.view.isUserInteractionEnabled = false
-    previewHost.view.isHidden = true
+    previewHost.view.alpha = 0
     previewHost.view.accessibilityElementsHidden = true
     if #available(iOS 16.4, *) { previewHost.safeAreaRegions = [] }
     previewMask.backgroundColor = .black
@@ -553,8 +558,9 @@ final class KeyboardRiderController: UIViewController {
     if moves { spring(response: BrowseLayout.searchOpenResponse) { self.place(top: self.restingTop()) } }
   }
 
-  func prime(initialText: String, dims: Bool) {
+  func prime(initialText: String, dims: Bool, from source: CGRect? = nil) {
     guard !isVisible, view.window != nil, var growth else { return }
+    openSource = source
     growth.initialText = initialText
     growth.dim = dims ? CGFloat(BrowseLayout.trayDim) : 0
     self.growth = growth
@@ -618,6 +624,8 @@ final class KeyboardRiderController: UIViewController {
     let fromDrag = opensFromDrag && !view.isHidden
     opensFromDrag = false
     let reopening = !view.isHidden && !fromDrag
+    let source = reopening || fromDrag ? nil : openSource.map { view.convert($0, from: nil) }
+    openSource = nil
     if !fromDrag { dropPreview() }
     view.isHidden = false
     UIView.performWithoutAnimation {
@@ -644,13 +652,7 @@ final class KeyboardRiderController: UIViewController {
       }
       host.view.layer.removeAllAnimations()
       host.view.alpha = 1
-      let handing = generation
-      later(Self.previewHold, over: Self.previewFade, {
-        self.previewHost.view.alpha = 0
-      }, completion: { [weak self] in
-        guard let self, self.generation == handing else { return }
-        self.dropPreview()
-      })
+      handOverPreview()
     } else {
       bandHost.view.layer.removeAllAnimations()
       bandHost.view.alpha = 0
@@ -658,6 +660,11 @@ final class KeyboardRiderController: UIViewController {
       material.alpha = 1
       host.view.layer.removeAllAnimations()
       host.view.alpha = 1
+      if source != nil {
+        showPreview()
+        previewHost.view.alpha = 1
+        handOverPreview()
+      }
     }
 
     if UIAccessibility.isReduceMotionEnabled {
@@ -678,6 +685,20 @@ final class KeyboardRiderController: UIViewController {
     if fromDrag {
       UIView.performWithoutAnimation {
         morph.configure(growth, text: growth.initialText, showsCaret: true)
+        morph.setText(visible: true)
+      }
+    } else if let source {
+      let top = source.midY - field.midY
+      UIView.performWithoutAnimation {
+        body.alpha = 0
+        place(top: top)
+        iconsHost.view.alpha = 0
+        morph.frame = CGRect(x: source.minX, y: field.minY, width: source.width, height: field.height)
+        morph.configure(growth, text: growth.initialText, showsCaret: true)
+        morph.pose(open: true, growth: growth, fieldWidth: field.width)
+        morph.setPlus(visible: false)
+        morph.setTile(visible: false)
+        morph.setSkin(visible: true)
         morph.setText(visible: true)
       }
     } else if !reopening {
@@ -703,7 +724,7 @@ final class KeyboardRiderController: UIViewController {
     UIView.animate(withDuration: Self.bodyFade, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]) {
       self.body.alpha = 1
     }
-    if growth.handsBackToBar, !reopening, !fromDrag {
+    if growth.handsBackToBar, !reopening, !fromDrag, source == nil {
       UIView.performWithoutAnimation { bandHost.view.alpha = 1 }
       UIView.animate(withDuration: Self.bodyFade, delay: 0, options: [.beginFromCurrentState, .curveEaseIn]) {
         self.bandHost.view.alpha = 0
@@ -870,22 +891,43 @@ final class KeyboardRiderController: UIViewController {
     }
   }
 
+  func warmPreview() {
+    guard !hasPreview, !isVisible, !isDraggingOpen else { return }
+    mountPreview()
+    UIView.performWithoutAnimation {
+      if riser.bounds.size != view.bounds.size { sizeRiser() }
+      previewHost.view.layoutIfNeeded()
+    }
+  }
+
+  private func mountPreview() {
+    previewHost.rootView = makePreview()
+    hasPreview = true
+  }
+
   private func showPreview() {
     guard let growth else { return }
-    previewHost.rootView = makePreview()
+    mountPreview()
     previewHost.view.layer.removeAllAnimations()
     previewHost.view.frame = body.bounds
     let rowsTop = growth.fieldTop + growth.fieldHeight
     previewMask.frame = CGRect(x: 0, y: rowsTop, width: body.bounds.width, height: max(body.bounds.height - rowsTop, 0))
-    previewHost.view.isHidden = false
     previewHost.view.layoutIfNeeded()
+  }
+
+  private func handOverPreview() {
+    let handing = generation
+    later(Self.previewHold, over: Self.previewFade, {
+      self.previewHost.view.alpha = 0
+    }, completion: { [weak self] in
+      guard let self, self.generation == handing else { return }
+      self.dropPreview()
+    })
   }
 
   private func dropPreview() {
     previewHost.view.layer.removeAllAnimations()
-    previewHost.view.isHidden = true
     previewHost.view.alpha = 0
-    previewHost.rootView = AnyView(EmptyView())
   }
 
   private func dragRubber(_ beyond: CGFloat) -> CGFloat {

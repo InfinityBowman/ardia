@@ -42,6 +42,7 @@ enum SearchPrewarm {
     host.view.layoutIfNeeded()
     DispatchQueue.main.async {
       host.view.removeFromSuperview()
+      SearchMotion.rider?.warmPreview()
     }
   }
 }

@@ -633,6 +633,15 @@ from Arc's half. Positions are the + glyph's centre.
   ≈ 300 ms after the lift. The rows stay up throughout, with no fade.
 - `rec5`'s halves were swapped as well, so the timings this section used to give for "Arc's" slow
   swipe-up (bare blur band, rows at 133 ms) were Ardia's own and have been removed.
+
+**Page menu address row into search (owner's seventh recording, `rec7`, 60 fps; Arc is the first half,
+on cloudflare.com).** Tapping the menu's address capsule runs everything at once rather than clearing the
+menu first. In the first changed frame, the suggestion rows are already drawn, over the still-visible
+menu's icon grid. The address capsule turns into the field in place, with the URL selected, at the menu's
+address row (y ≈ 569). The menu fades out where it is over ≈ 6 frames (≈ 100 ms); it does not slide down.
+The field and the panel spring up from there to the field's rest (y ≈ 312) in ≈ 0.3 s, rows riding with
+them. The keyboard starts ≈ 100 ms after the tap. With the URL selected, the rows are Arc's
+empty-field rows, not matches for the URL.
 - Close (tap the page): the field drops on the 0.30 s spring, the card grows back (content scale
   0.951 → 1, 50 % at ≈ 75 ms, done ≈ 200 ms), rows ghost out within ≈ 50 ms and the tabs button and ^ are
   back on the bar's row by ≈ 80 ms.
@@ -751,6 +760,17 @@ system keyboard both apps get the system's slide.
   and the preview fade. SwiftUI visibility changes that arrive mid-drag wait for its end
   (`rider.visibleWhileDragging` marks one). A remembered keyboard height under 120 pt is neither stored
   nor trusted. Rows fade out over 50 ms on close.
+- Page menu address row into search: `ToolbarSheet` hands the address capsule's window frame to
+  `SearchMotion.source`. The rider opens with the field at that frame (URL shown, no + or tile) and the
+  panel's rows at their place under it. It then springs the panel to its rest on the 0.30 s spring and
+  widens the field on the 0.25 s spring. The panel and rows fade in over 100 ms, and the bar's band and
+  icons stay hidden. When search opens, `PageMenuPanel` fades the menu out in place over 100 ms
+  (`handToSearch`) instead of sliding it into the bar. A `SearchTray` opened with its text selected
+  (`selectsAll`) shows the empty-field rows until the text is edited, as Arc's does. The rows are drawn
+  from the first frame by the same preview host the swipe-up uses. That host is mounted once, right
+  after the search prewarm (`warmPreview`), so its rows exist before the keyboard bring-up blocks the
+  main thread (≈ 170 ms in the simulator). The live rows then take over under it: the preview holds
+  300 ms and fades over 100 ms.
 - Measured in the simulator (iPhone 17 Pro, Release, 60 fps, panel top per display-link frame, medians of
   warm tap-opens; treat as relative): 50 % / 90 % / settled at 179–181 / 279–281 / 471–473 ms before this
   round and 105–106.5 / 214.5 / 414.6 ms after, against Arc's ≈ 100 / 200 / 400 ms. The worst main-thread
