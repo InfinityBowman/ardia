@@ -285,6 +285,7 @@ final class KeyboardRiderController: UIViewController {
   private var requestedVisible = false
   private var isDraggingOpen = false
   private var launchVelocity: CGFloat = 0
+  private var opensFromDrag = false
   private var dragPeak: CGFloat = 0
   private var isMorphing = false
   nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
@@ -305,7 +306,7 @@ final class KeyboardRiderController: UIViewController {
   static let iconsFadeIn: TimeInterval = 0.15
   static let iconsFadeInDelay: TimeInterval = 0.1
   static let handBackFade: TimeInterval = 0.035
-  static let handBackRowsFade: TimeInterval = 0.1
+  static let handBackRowsFade: TimeInterval = 0.05
   static let handBackIconsDelay: TimeInterval = 0.02
   static let handBackIconsFade: TimeInterval = 0.06
   static let closeTextFade: TimeInterval = 0.06
@@ -317,7 +318,10 @@ final class KeyboardRiderController: UIViewController {
   static let defaultKeyboardLift: CGFloat = 336
   static let symbolWarmDelay: TimeInterval = 1.5
   static let pendingLimit: TimeInterval = 0.6
-  static let dragIconsFade: TimeInterval = 0.07
+  static let dragIconsFade: TimeInterval = 0.03
+  static let dragHandover: TimeInterval = 0.04
+  static let dragRowsDelay: TimeInterval = 0.12
+  static let dragRowsFade: TimeInterval = 0.03
   static let dragRubber: CGFloat = 0.3
   static let dragReverse: CGFloat = 150
   static let dragReverseDistance: CGFloat = 12
@@ -501,6 +505,10 @@ final class KeyboardRiderController: UIViewController {
       dim.isUserInteractionEnabled = isInteractive
     }
 
+    if isDraggingOpen {
+      if visible != isVisible { HarnessProbe.mark("rider.visibleWhileDragging", "\(visible)") }
+      return
+    }
     if visible != isVisible {
       self.holdsLift = holdsLift
       heldLift = holdsLift ? currentLift : nil
@@ -589,7 +597,9 @@ final class KeyboardRiderController: UIViewController {
     HarnessProbe.follow(morph, as: "morph")
     generation += 1
     isVisible = true
-    let reopening = !view.isHidden
+    let fromDrag = opensFromDrag && !view.isHidden
+    opensFromDrag = false
+    let reopening = !view.isHidden && !fromDrag
     view.isHidden = false
     UIView.performWithoutAnimation {
       view.layoutIfNeeded()
@@ -606,6 +616,14 @@ final class KeyboardRiderController: UIViewController {
       UIView.animate(withDuration: Self.bodyFade, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]) {
         self.bandHost.view.alpha = 0
         self.material.alpha = 1
+        self.host.view.alpha = 1
+      }
+    } else if fromDrag {
+      UIView.animate(withDuration: Self.dragHandover, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]) {
+        self.bandHost.view.alpha = 0
+        self.material.alpha = 1
+      }
+      later(Self.dragRowsDelay, over: Self.dragRowsFade) {
         self.host.view.alpha = 1
       }
     } else {
@@ -632,7 +650,12 @@ final class KeyboardRiderController: UIViewController {
       return
     }
 
-    if !reopening {
+    if fromDrag {
+      UIView.performWithoutAnimation {
+        morph.configure(growth, text: growth.initialText, showsCaret: true)
+        morph.setText(visible: true)
+      }
+    } else if !reopening {
       UIView.performWithoutAnimation {
         body.alpha = 0
         place(top: closedTop)
@@ -655,7 +678,7 @@ final class KeyboardRiderController: UIViewController {
     UIView.animate(withDuration: Self.bodyFade, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]) {
       self.body.alpha = 1
     }
-    if growth.handsBackToBar, !reopening {
+    if growth.handsBackToBar, !reopening, !fromDrag {
       UIView.performWithoutAnimation { bandHost.view.alpha = 1 }
       UIView.animate(withDuration: Self.bodyFade, delay: 0, options: [.beginFromCurrentState, .curveEaseIn]) {
         self.bandHost.view.alpha = 0
@@ -976,6 +999,7 @@ final class KeyboardRiderController: UIViewController {
     let reversed = velocity > Self.dragReverse && dy > dragPeak + Self.dragReverseDistance
     if commits, !reversed {
       launchVelocity = min(velocity, 0)
+      opensFromDrag = true
       return true
     }
     generation += 1
