@@ -8,7 +8,7 @@ struct PageMenuPanel: View {
   @Environment(\.displayScale) private var displayScale
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @State private var shownID: UUID?
-  @State private var mountedID: UUID?
+  @State private var isMounted = false
   @State private var rise: CGFloat = 0
   @State private var dimmed = false
   @State private var drag: CGFloat = 0
@@ -23,7 +23,7 @@ struct PageMenuPanel: View {
       let travel = PageMenuLayout.travel(panelHeight: panelHeight, safeBottom: safeBottom)
       let isShown = shownID != nil
       ZStack(alignment: .bottom) {
-        if let mountedID {
+        if isMounted {
           Color.black
             .opacity(dimmed ? PageMenuLayout.dim : 0)
             .padding(.bottom, max(panelHeight - (1 - rise) * travel - drag - PageMenuLayout.panelRadius, 0))
@@ -33,7 +33,7 @@ struct PageMenuPanel: View {
             .accessibilityHidden(!isShown)
             .accessibilityLabel("Close Menu")
             .accessibilityAddTraits(.isButton)
-          panel(mountedID, safeBottom: safeBottom, maxHeight: proxy.size.height - PageMenuLayout.topGap)
+          panel(shownID, safeBottom: safeBottom, maxHeight: proxy.size.height - PageMenuLayout.topGap)
             .environment(\.colorScheme, menuScheme)
             .environment(\.pageMenuBarScheme, colorScheme)
             .environment(\.pageMenuShown, isShown)
@@ -59,7 +59,7 @@ struct PageMenuPanel: View {
     .task { await prewarm() }
   }
 
-  private func panel(_ id: UUID, safeBottom: CGFloat, maxHeight: CGFloat) -> some View {
+  private func panel(_ id: UUID?, safeBottom: CGFloat, maxHeight: CGFloat) -> some View {
     ToolbarSheet(tabID: id, panelMaxHeight: maxHeight - safeBottom, onClose: { app.browse.isToolbarPresented = false })
       .padding(.bottom, safeBottom)
       .background(alignment: .top) {
@@ -76,11 +76,11 @@ struct PageMenuPanel: View {
 
   private func prewarm() async {
     try? await Task.sleep(for: PageMenuLayout.prewarmDelay)
-    guard mountedID == nil, let id = app.tabs.selectedTabID else { return }
+    guard !isMounted else { return }
     HarnessProbe.mark("menu.prewarm")
     var instant = Transaction()
     instant.disablesAnimations = true
-    withTransaction(instant) { mountedID = id }
+    withTransaction(instant) { isMounted = true }
   }
 
   @ViewBuilder
@@ -129,7 +129,7 @@ struct PageMenuPanel: View {
       app.browse.isToolbarPresented = false
       return
     }
-    let isWarm = mountedID != nil
+    let isWarm = isMounted
     var instant = Transaction()
     instant.disablesAnimations = true
     withTransaction(instant) {
@@ -137,7 +137,7 @@ struct PageMenuPanel: View {
         generation += 1
         riders = 1
       }
-      mountedID = id
+      isMounted = true
       shownID = id
       app.browse.pageMenuCarriesBarControls = true
       drag = 0

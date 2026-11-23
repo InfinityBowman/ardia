@@ -3,8 +3,13 @@ import ArdiaDesign
 import ArdiaSync
 import SwiftUI
 
-struct ToolbarSheet: View {
+struct PendingFollowUp {
+  let action: PageMenuFollowUp
   let tabID: UUID
+}
+
+struct ToolbarSheet: View {
+  let tabID: UUID?
   var panelMaxHeight: CGFloat?
   var onClose: (() -> Void)?
 
@@ -17,15 +22,15 @@ struct ToolbarSheet: View {
   @State private var contentHeight: CGFloat = 560
   @State private var bottomInset: CGFloat = 0
   @State private var windowRoom: CGFloat = .greatestFiniteMagnitude
-  @State private var followUp: PageMenuFollowUp?
+  @State private var followUp: PendingFollowUp?
   @AppStorage("pageMenu.displayOptionsExpanded") private var showsDisplay = false
   @State private var showsMore = false
   @State private var scrollPosition = ScrollPosition(edge: .top)
   @ScaledMetric(relativeTo: .body) private var capsuleHeight: CGFloat = PageMenuLayout.addressHeight
   @ScaledMetric(relativeTo: .body) private var tileSize: CGFloat = PageMenuLayout.tile
 
-  private var tab: BrowserTab? { app.tabs.tab(tabID) }
-  private var page: WebTab? { app.web.existingWebTab(tabID) }
+  private var tab: BrowserTab? { tabID.flatMap(app.tabs.tab) }
+  private var page: WebTab? { tabID.flatMap { app.web.existingWebTab($0) } }
   private var isWebPage: Bool { tab.map { BrowserURL.isSyncable($0.url) } ?? false }
 
   var body: some View {
@@ -125,7 +130,7 @@ struct ToolbarSheet: View {
     app.downloadActivity.menuClosed()
     guard let followUp else { return }
     self.followUp = nil
-    app.perform(followUp, on: tabID)
+    app.perform(followUp.action, on: followUp.tabID)
   }
 
   private var menuDetent: PresentationDetent {
@@ -134,7 +139,7 @@ struct ToolbarSheet: View {
   }
 
   private func close(then next: PageMenuFollowUp) {
-    followUp = next
+    followUp = tabID.map { PendingFollowUp(action: next, tabID: $0) }
     leave()
   }
 
@@ -193,7 +198,7 @@ struct ToolbarSheet: View {
   private var pinButton: some View {
     let isPinned = tab.map(app.isPinnedToMac) ?? false
     return capsuleButton(isPinned ? "star.fill" : "star", label: isPinned ? "Pinned to Mac" : "Pin to Mac", enabled: isWebPage && tab?.isPrivate == false) {
-      app.pinToMac(tabID)
+      if let tabID { app.pinToMac(tabID) }
     }
     .contentTransition(.symbolEffect(.replace))
     .sensoryFeedback(.success, trigger: isPinned) { _, pinned in pinned }
@@ -272,17 +277,17 @@ struct ToolbarSheet: View {
       }
       Spacer(minLength: 0)
       actionButton("doc.plaintext", label: "Reader") {
-        app.browse.readerTabID = tabID
+        if let tabID { app.browse.readerTabID = tabID }
         leave()
       }
       Spacer(minLength: 0)
       actionButton("link", label: "Copy Link") {
-        if app.copyLink(of: tabID) { copies += 1 }
+        if let tabID, app.copyLink(of: tabID) { copies += 1 }
       }
       Spacer(minLength: 0)
       actionButton("square.and.arrow.up", label: "Share") {
         leave()
-        app.sharePage(tabID)
+        if let tabID { app.sharePage(tabID) }
       }
     }
   }
@@ -368,9 +373,9 @@ struct ToolbarSheet: View {
 
   private func desktopRow(_ page: WebTab) -> some View {
     PageMenuToggleRow(title: "Request Desktop Site", icon: "desktopcomputer", isOn: Binding(
-      get: { app.browse.desktopTabs.contains(tabID) },
+      get: { app.browse.desktopTabs.contains(page.id) },
       set: { wanted in
-        guard wanted != app.browse.desktopTabs.contains(tabID) else { return }
+        guard wanted != app.browse.desktopTabs.contains(page.id) else { return }
         app.toggleDesktopSite(for: page)
         leave()
       }
