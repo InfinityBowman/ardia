@@ -132,11 +132,11 @@ struct SearchTrayHost: View {
   }
 
   private func barIcons(safeBottom: CGFloat) -> SearchBarIcons {
-    SearchBarIcons(safeBottom: safeBottom, isShown: handsBackToBar, app: app, look: look, usesGlass: usesGlass, screenLayout: screenLayout)
+    SearchBarIcons(safeBottom: safeBottom, isShown: showsBarIcons && handsBackToBar, app: app, look: look, usesGlass: usesGlass, screenLayout: screenLayout)
   }
 
   private var handsBackToBar: Bool {
-    showsBarIcons && app.surface == .browsing && app.tabs.selectedTab != nil
+    app.surface == .browsing && app.tabs.selectedTabID != nil
   }
 
   private func growth(panelHeight: CGFloat, safeBottom: CGFloat) -> RiderGrowth {
