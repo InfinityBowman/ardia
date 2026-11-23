@@ -809,7 +809,14 @@ system keyboard both apps get the system's slide.
     ≈ 67 ms, the tabs button and ^ sit on the panel's top row by ≈ 60 ms, and the dim clears in ≈ 2 frames;
   - Display Options expands in place with a chevron that turns from right to down (expand ≈ 0.28 s,
     collapse ≈ 0.30 s, both critically damped, the panel top moving 194–196 pt), and stays as it was left
-    across opens (the recording's first open is already expanded, and the open at 13 s collapsed);
+    across opens (the recording's first open is already expanded, and the open at 13 s collapsed). Measured
+    again on a 120 fps iPhone recording (Arc renders it at 60 fps): expand and collapse are both a critically
+    damped spring with response **0.245–0.25 s** (95 % at 0.195–0.197 s, fit rms 0.003), the top moving 196 pt.
+    The panel's bottom and the groups below stay put while the top rises. The new rows are not faded or
+    clipped one by one: each row's slot grows from 0 to its height with the row's content centred in it, so
+    the rows start stacked on top of each other under the header and spread apart, with the group's rounded
+    rectangle clipping what hangs out. Collapse runs the same in reverse. The chevron turns over the same
+    spring;
   - material: a heavy blur of the **undimmed** page with a faint grey tint (`#F3F2F5` page → 235–242,
     a (211, 225, 241) patch → (213, 226, 240)); the page outside the panel is dimmed 22.6 %;
   - groups are translucent too: rows ≈ black 0.15 over the material (200–210, the page's hue still
@@ -827,7 +834,10 @@ system keyboard both apps get the system's slide.
   undimmed page. Reduce Transparency keeps the solid fills. Address row, tiles and rows are translucent (black
   0.11 / 0.13 / 0.15 in light, white 0.14 / 0.11 / 0.15 in dark), and rows in a group are split by 1 pt
   full-width white separators (0.45 light, 0.1 dark). Display Options remembers whether it was open
-  (`pageMenu.displayOptionsExpanded`), expands on a 0.30 s critically damped spring, and lists Translate,
+  (`pageMenu.displayOptionsExpanded`), expands and collapses the way Arc's does (each row's slot grows from 0
+  with its content centred, the group clips; the panel's height follows in the same layout pass, so the top
+  edge moves on the spring instead of jumping a frame later) on a 0.25 s critically damped spring (harness:
+  response 0.2475 s, 95 % at 0.196 s, 196 pt), and lists Translate,
   Night Shade (where Arc has Reader Mode, which is a tile here), Page Zoom and Request Desktop Site. The zoom
   control keeps its reset percentage, now in an 8 pt rounded rectangle. Closing runs on a 0.22 s spring
   (was 0.12 s), and the tiles and groups fade with the rise (gone below 45 % of it, ≈ 65 ms into a close),

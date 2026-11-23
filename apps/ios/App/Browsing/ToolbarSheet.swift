@@ -20,6 +20,7 @@ struct ToolbarSheet: View {
   @State private var copies = 0
   @State private var confirmsTranslation = false
   @State private var contentHeight: CGFloat = 560
+  @State private var fitsPanel = true
   @State private var bottomInset: CGFloat = 0
   @State private var windowRoom: CGFloat = .greatestFiniteMagnitude
   @State private var followUp: PendingFollowUp?
@@ -43,9 +44,8 @@ struct ToolbarSheet: View {
         }
         VStack(spacing: PageMenuLayout.groupSpacing) {
           PageMenuDownloads { close(then: .sheet(.downloads)) }
-          PageMenuGroup {
-            PageMenuDisclosureRow(title: "Display Options", icon: "doc.text.image", isExpanded: $showsDisplay)
-            if showsDisplay, let page {
+          PageMenuDisclosureGroup(title: "Display Options", icon: "doc.text.image", isExpanded: $showsDisplay) {
+            if let page {
               translateRow
               nightShadeRow(page)
               zoomRow(page)
@@ -64,9 +64,8 @@ struct ToolbarSheet: View {
               blockingRow(page)
             }
           }
-          PageMenuGroup {
-            PageMenuDisclosureRow(title: "More", icon: "ellipsis.circle", isExpanded: $showsMore)
-            if showsMore {
+          PageMenuDisclosureGroup(title: "More", icon: "ellipsis.circle", isExpanded: $showsMore) {
+            Group {
               sendRow
               printRow
               PageMenuRow("History", icon: "clock") { close(then: .sheet(.history)) }
@@ -89,19 +88,25 @@ struct ToolbarSheet: View {
     }
     .scrollPosition($scrollPosition)
     .scrollBounceBehavior(.basedOnSize)
-    .scrollDisabled(panelMaxHeight.map { contentHeight <= $0 } ?? false)
-    .frame(height: panelMaxHeight.map { min(contentHeight, $0) })
+    .scrollDisabled(panelMaxHeight != nil && fitsPanel)
+    .modifier(PageMenuFitHeight(maxHeight: panelMaxHeight))
     .ignoresSafeArea(.container, edges: panelMaxHeight == nil ? .bottom : .all)
     .onScrollGeometryChange(for: CGFloat.self) { geometry in
-      geometry.contentSize.height + (panelMaxHeight == nil ? geometry.contentInsets.top : 0)
+      panelMaxHeight == nil ? geometry.contentSize.height + geometry.contentInsets.top : 0
     } action: { _, height in
       contentHeight = height.rounded(.up)
+    }
+    .onScrollGeometryChange(for: Bool.self) { geometry in
+      panelMaxHeight.map { geometry.contentSize.height <= $0 } ?? true
+    } action: { _, fits in
+      fitsPanel = fits
     }
     .background {
       Color.clear.onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { bottomInset = $0 }
       WindowRoomReader { windowRoom = $0 }
         .accessibilityHidden(true)
     }
+    .environment(\.pageMenuRevealAnimation, panelMaxHeight == nil ? nil : PageMenuLayout.expand)
     .tint(Palette.formAccent)
     .presentationDetents([menuDetent])
     .presentationCornerRadius(MenuLayout.sheetRadius)

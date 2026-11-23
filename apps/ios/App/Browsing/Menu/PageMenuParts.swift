@@ -38,7 +38,7 @@ enum PageMenuLayout {
   static let ridersLeave = Animation.easeIn(duration: 0.05).delay(0.025)
   static let dimClear = Animation.easeOut(duration: 0.08)
   static let prewarmDelay: Duration = .seconds(1.5)
-  static let expand = Animation.spring(response: 0.3, dampingFraction: 1)
+  static let expand = Animation.spring(response: 0.25, dampingFraction: 1)
   static let contentShown: CGFloat = 0.45
   static let separator: CGFloat = 1
 
@@ -140,8 +140,10 @@ struct PageMenuRowIcon: View {
 struct PageMenuRowStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .background(configuration.isPressed ? Color(.systemFill) : .clear)
-      .animation(.easeOut(duration: configuration.isPressed ? 0 : 0.2), value: configuration.isPressed)
+      .background {
+        (configuration.isPressed ? Color(.systemFill) : .clear)
+          .animation(.easeOut(duration: configuration.isPressed ? 0 : 0.2), value: configuration.isPressed)
+      }
   }
 }
 
@@ -203,12 +205,11 @@ struct PageMenuRow: View {
 struct PageMenuDisclosureRow: View {
   let title: LocalizedStringKey
   var icon: String?
-  @Binding var isExpanded: Bool
+  let isExpanded: Bool
+  let toggle: () -> Void
 
   var body: some View {
-    Button {
-      withAnimation(PageMenuLayout.expand) { isExpanded.toggle() }
-    } label: {
+    Button(action: toggle) {
       PageMenuRowLabel(icon: icon, title: Text(title)) {
         Image(systemName: "chevron.right")
           .font(.footnote.weight(.semibold))
@@ -256,5 +257,133 @@ struct PageMenuToggleRow: View {
     .padding(.horizontal, Spacing.page)
     .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? Spacing.small : 0)
     .frame(minHeight: PageMenuLayout.rowHeight)
+  }
+}
+
+struct PageMenuDisclosureGroup<Rows: View>: View {
+  let title: LocalizedStringKey
+  var icon: String?
+  @Binding var isExpanded: Bool
+  @ViewBuilder var rows: Rows
+
+  @State private var shown: Bool
+  @State private var mounted: Bool
+  @Environment(\.pageMenuRevealAnimation) private var revealAnimation
+
+  init(title: LocalizedStringKey, icon: String? = nil, isExpanded: Binding<Bool>, @ViewBuilder rows: () -> Rows) {
+    self.title = title
+    self.icon = icon
+    _isExpanded = isExpanded
+    self.rows = rows()
+    _shown = State(initialValue: isExpanded.wrappedValue)
+    _mounted = State(initialValue: isExpanded.wrappedValue)
+  }
+
+  var body: some View {
+    let reveal: CGFloat = shown ? 1 : 0
+    PageMenuRevealLayout(reveal: reveal) {
+      PageMenuDisclosureRow(title: title, icon: icon, isExpanded: shown) {
+        HarnessProbe.mark("menu.disclosure")
+        mounted = true
+        withAnimation(revealAnimation, completionCriteria: .removed) {
+          shown.toggle()
+        } completion: {
+          if !shown { mounted = false }
+        }
+        isExpanded = shown
+      }
+      .zIndex(1)
+      if mounted {
+        Group(subviews: rows) { subviews in
+          ForEach(subviews) { subview in
+            Palette.menuSeparator.frame(height: PageMenuLayout.separator)
+            subview
+          }
+        }
+        .modifier(PageMenuRevealVisibility(reveal: reveal))
+        .allowsHitTesting(shown)
+        .accessibilityHidden(!shown)
+        .transition(.identity)
+      }
+    }
+    .clipShape(.rect(cornerRadius: PageMenuLayout.groupRadius, style: .continuous))
+    .background(Palette.menuRow, in: .rect(cornerRadius: PageMenuLayout.groupRadius, style: .continuous))
+    .onChange(of: isExpanded) { _, expanded in
+      guard shown != expanded else { return }
+      shown = expanded
+      mounted = expanded
+    }
+  }
+}
+
+struct PageMenuRevealLayout: SwiftUI.Layout {
+  var reveal: CGFloat
+
+  var animatableData: CGFloat {
+    get { reveal }
+    set { reveal = newValue }
+  }
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let width = proposal.width ?? subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+    return CGSize(width: width, height: slots(heights(subviews, width: width)).reduce(0, +))
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    let heights = heights(subviews, width: bounds.width)
+    var top = bounds.minY
+    for (index, slot) in slots(heights).enumerated() {
+      subviews[index].place(at: CGPoint(x: bounds.minX, y: top + slot / 2), anchor: .leading,
+                            proposal: ProposedViewSize(width: bounds.width, height: heights[index]))
+      top += slot
+    }
+  }
+
+  private func heights(_ subviews: Subviews, width: CGFloat) -> [CGFloat] {
+    subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
+  }
+
+  private func slots(_ heights: [CGFloat]) -> [CGFloat] {
+    let shown = min(max(reveal, 0), 1)
+    return heights.enumerated().map { index, height in index == 0 ? height : height * shown }
+  }
+}
+
+struct PageMenuRevealVisibility: ViewModifier, Animatable {
+  var reveal: CGFloat
+
+  var animatableData: CGFloat {
+    get { reveal }
+    set { reveal = newValue }
+  }
+
+  func body(content: Content) -> some View {
+    content.opacity(reveal > 0.001 ? 1 : 0)
+  }
+}
+
+struct PageMenuFitHeight: ViewModifier {
+  let maxHeight: CGFloat?
+
+  func body(content: Content) -> some View {
+    if let maxHeight {
+      PageMenuFitHeightLayout(maxHeight: maxHeight) { content }
+    } else {
+      content
+    }
+  }
+}
+
+struct PageMenuFitHeightLayout: SwiftUI.Layout {
+  let maxHeight: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    guard let content = subviews.first else { return .zero }
+    let ideal = content.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+    return CGSize(width: proposal.width ?? ideal.width, height: min(ideal.height, maxHeight))
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
   }
 }

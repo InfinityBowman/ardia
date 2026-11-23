@@ -12,7 +12,8 @@ struct PageMenuPanel: View {
   @State private var rise: CGFloat = 0
   @State private var dimmed = false
   @State private var drag: CGFloat = 0
-  @State private var panelHeight: CGFloat = 560
+  @State private var measured = PageMenuMeasuredHeight()
+  @State private var panelFills = false
   @State private var generation = 0
   @State private var riders: Double = 0
   @ScaledMetric(relativeTo: .body) private var capsuleHeight: CGFloat = PageMenuLayout.addressHeight
@@ -20,19 +21,10 @@ struct PageMenuPanel: View {
   var body: some View {
     GeometryReader { proxy in
       let safeBottom = proxy.safeAreaInsets.bottom
-      let travel = PageMenuLayout.travel(panelHeight: panelHeight, safeBottom: safeBottom)
+      let travel = PageMenuLayout.travel(panelHeight: measured.height, safeBottom: safeBottom)
       let isShown = shownID != nil
       ZStack(alignment: .bottom) {
         if isMounted {
-          Color.black
-            .opacity(dimmed ? PageMenuLayout.dim : 0)
-            .padding(.bottom, max(panelHeight - (1 - rise) * travel - drag - PageMenuLayout.panelRadius, 0))
-            .contentShape(.rect)
-            .onTapGesture { app.browse.isToolbarPresented = false }
-            .allowsHitTesting(isShown)
-            .accessibilityHidden(!isShown)
-            .accessibilityLabel("Close Menu")
-            .accessibilityAddTraits(.isButton)
           panel(shownID, safeBottom: safeBottom, maxHeight: proxy.size.height - PageMenuLayout.topGap)
             .environment(\.colorScheme, menuScheme)
             .environment(\.pageMenuBarScheme, colorScheme)
@@ -40,6 +32,9 @@ struct PageMenuPanel: View {
             .overlay(alignment: .top) {
               PageMenuBarRiders(addressHeight: capsuleHeight)
                 .opacity(riders)
+            }
+            .background(alignment: .top) {
+              dim(height: proxy.size.height + proxy.safeAreaInsets.top + proxy.safeAreaInsets.bottom, isShown: isShown)
             }
             .offset(y: (1 - rise) * travel + drag)
             .environment(\.pageMenuRise, rise)
@@ -59,6 +54,19 @@ struct PageMenuPanel: View {
     .task { await prewarm() }
   }
 
+  private func dim(height: CGFloat, isShown: Bool) -> some View {
+    Color.black
+      .opacity(dimmed ? PageMenuLayout.dim : 0)
+      .frame(height: height)
+      .alignmentGuide(.top) { $0[.bottom] - PageMenuLayout.panelRadius }
+      .contentShape(.rect)
+      .onTapGesture { app.browse.isToolbarPresented = false }
+      .allowsHitTesting(isShown)
+      .accessibilityHidden(!isShown)
+      .accessibilityLabel("Close Menu")
+      .accessibilityAddTraits(.isButton)
+  }
+
   private func panel(_ id: UUID?, safeBottom: CGFloat, maxHeight: CGFloat) -> some View {
     ToolbarSheet(tabID: id, panelMaxHeight: maxHeight - safeBottom, onClose: { app.browse.isToolbarPresented = false })
       .padding(.bottom, safeBottom)
@@ -69,9 +77,10 @@ struct PageMenuPanel: View {
           .padding(.bottom, -PageMenuLayout.overhang)
           .allowsHitTesting(false)
       }
-      .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
-      .highPriorityGesture(pull, isEnabled: panelHeight - safeBottom < maxHeight - safeBottom)
-      .simultaneousGesture(pull, isEnabled: panelHeight - safeBottom >= maxHeight - safeBottom)
+      .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measured.height = $0 }
+      .onGeometryChange(for: Bool.self) { $0.size.height >= maxHeight } action: { panelFills = $0 }
+      .highPriorityGesture(pull, isEnabled: !panelFills)
+      .simultaneousGesture(pull, isEnabled: panelFills)
   }
 
   private func prewarm() async {
@@ -176,10 +185,15 @@ struct PageMenuPanel: View {
   }
 }
 
+final class PageMenuMeasuredHeight {
+  var height: CGFloat = 560
+}
+
 extension EnvironmentValues {
   @Entry var pageMenuRise: CGFloat = 1
   @Entry var pageMenuBarScheme: ColorScheme?
   @Entry var pageMenuShown = true
+  @Entry var pageMenuRevealAnimation: Animation? = PageMenuLayout.expand
 }
 
 struct PageMenuShownWatcher: ViewModifier {
