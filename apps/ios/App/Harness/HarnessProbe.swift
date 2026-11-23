@@ -9,6 +9,18 @@ final class HarnessProbe {
 
   static func start() { _ = shared }
 
+  static func follow(_ view: UIView, as name: String, for duration: CFTimeInterval = 1.2) {
+    guard let shared else { return }
+    shared.followed[name] = Followed(view: view, until: CACurrentMediaTime() + duration)
+  }
+
+  private struct Followed {
+    weak var view: UIView?
+    var until: CFTimeInterval
+  }
+
+  private var followed: [String: Followed] = [:]
+
   static func mark(_ name: String, _ detail: String? = nil) {
     guard let shared else { return }
     shared.signposter.emitEvent("mark", "\(name, privacy: .public)")
@@ -90,6 +102,16 @@ final class HarnessProbe {
 
   private func tick(_ link: CADisplayLink) {
     append(String(format: "{\"k\":\"f\",\"ts\":%.6f,\"due\":%.6f,\"now\":%.6f}", link.timestamp, link.targetTimestamp, CACurrentMediaTime()))
+    guard !followed.isEmpty else { return }
+    let now = CACurrentMediaTime()
+    for (name, entry) in followed {
+      guard now < entry.until, let view = entry.view else {
+        followed[name] = nil
+        continue
+      }
+      let layer = view.layer.presentation() ?? view.layer
+      append(String(format: "{\"k\":\"p\",\"n\":\"%@\",\"ts\":%.6f,\"due\":%.6f,\"y\":%.2f,\"x\":%.2f,\"w\":%.2f,\"a\":%.3f}", name, link.timestamp, link.targetTimestamp, layer.frame.minY, layer.frame.minX, layer.frame.width, layer.opacity))
+    }
   }
 
   private func startRunLoopObserver() {

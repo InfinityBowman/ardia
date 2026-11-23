@@ -514,6 +514,8 @@ final class KeyboardRiderController: UIViewController {
 
   private func open() {
     guard let growth else { return }
+    HarnessProbe.follow(riser, as: "rider")
+    HarnessProbe.follow(morph, as: "morph")
     generation += 1
     isVisible = true
     let reopening = !view.isHidden
@@ -634,6 +636,8 @@ final class KeyboardRiderController: UIViewController {
 
   private func close() {
     guard let growth else { return }
+    HarnessProbe.follow(riser, as: "rider")
+    HarnessProbe.follow(morph, as: "morph")
     generation += 1
     isVisible = false
     awaitingKeyboard = false
