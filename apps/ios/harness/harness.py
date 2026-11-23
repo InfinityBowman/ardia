@@ -518,6 +518,29 @@ def scenario_display_options(sim):
     return steps
 
 
+def scenario_more_options(sim):
+    """Open the page menu, expand and collapse More twice at rest, then twice 0.2 s apart."""
+    more = find(sim, "Page Menu")
+    if not more:
+        sys.exit("no page menu button on screen")
+    batch(sim, [f"tap -x {more['x']:.0f} -y {more['y']:.0f}", "sleep 1.0"])
+    row = find(sim, "More")
+    if not row:
+        sys.exit("no More row in the page menu")
+    batch(sim, [f"tap -x {row['x']:.0f} -y {row['y']:.0f}", "sleep 1.0"])
+    open_row = find(sim, "More")
+    batch(sim, [f"tap -x {open_row['x']:.0f} -y {open_row['y']:.0f}", "sleep 1.0"])
+    shut = f"tap -x {row['x']:.0f} -y {row['y']:.0f}"
+    opened = f"tap -x {open_row['x']:.0f} -y {open_row['y']:.0f}"
+    steps = []
+    for _ in range(2):
+        steps += [shut, "sleep 1.0", opened, "sleep 1.0"]
+    for _ in range(2):
+        steps += [shut, "sleep 0.2", opened, "sleep 0.2"]
+    steps.append("sleep 1.0")
+    return steps
+
+
 def scenario_deck_close(sim, closes=3):
     """Open the switcher, flick the focused card up to close it, three times; the deck reflows each time."""
     tabs = find(sim, "Tabs")
@@ -649,6 +672,7 @@ SCENARIOS = {
     "deck-surfaces": scenario_deck_surfaces,
     "page-swipe": scenario_page_swipe,
     "display-options": scenario_display_options,
+    "more-options": scenario_more_options,
 }
 LAUNCH_ARGS["deck-turnback"] = ["-ArdiaDeck", TURNBACK_SCRIPT]
 LAUNCH_ARGS["deck-surfaces"] = ["-ArdiaDeck", SURFACES_SCRIPT]

@@ -292,15 +292,14 @@ struct PageMenuDisclosureGroup<Rows: View>: View {
         }
         isExpanded = shown
       }
-      .zIndex(1)
       if mounted {
         Group(subviews: rows) { subviews in
           ForEach(subviews) { subview in
-            Palette.menuSeparator.frame(height: PageMenuLayout.separator)
-            subview
+            Palette.menuSeparator.frame(idealHeight: PageMenuLayout.separator)
+            PageMenuRevealSlot { subview }
+              .clipped()
           }
         }
-        .modifier(PageMenuRevealVisibility(reveal: reveal))
         .allowsHitTesting(shown)
         .accessibilityHidden(!shown)
         .transition(.identity)
@@ -333,8 +332,8 @@ struct PageMenuRevealLayout: SwiftUI.Layout {
     let heights = heights(subviews, width: bounds.width)
     var top = bounds.minY
     for (index, slot) in slots(heights).enumerated() {
-      subviews[index].place(at: CGPoint(x: bounds.minX, y: top + slot / 2), anchor: .leading,
-                            proposal: ProposedViewSize(width: bounds.width, height: heights[index]))
+      subviews[index].place(at: CGPoint(x: bounds.minX, y: top), anchor: .topLeading,
+                            proposal: ProposedViewSize(width: bounds.width, height: slot))
       top += slot
     }
   }
@@ -349,16 +348,16 @@ struct PageMenuRevealLayout: SwiftUI.Layout {
   }
 }
 
-struct PageMenuRevealVisibility: ViewModifier, Animatable {
-  var reveal: CGFloat
-
-  var animatableData: CGFloat {
-    get { reveal }
-    set { reveal = newValue }
+struct PageMenuRevealSlot: SwiftUI.Layout {
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let content = subviews.first?.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil)) ?? .zero
+    return CGSize(width: proposal.width ?? content.width, height: proposal.height ?? content.height)
   }
 
-  func body(content: Content) -> some View {
-    content.opacity(reveal > 0.001 ? 1 : 0)
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    guard let content = subviews.first else { return }
+    let height = content.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil)).height
+    content.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: height))
   }
 }
 
