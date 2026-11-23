@@ -246,6 +246,14 @@ final class TabPager: NSObject {
     return offset
   }
 
+  private func releaseVelocity(_ velocity: CGFloat) -> CGFloat {
+    let pastEnd = (offset > 0 && !hasLeft) || (offset < 0 && !hasRight)
+    guard pastEnd else { return velocity }
+    guard velocity * offset < 0 else { return 0 }
+    let give = max(1 - abs(offset) / PagerPhysics.rubberLimit, 0)
+    return velocity * give * give
+  }
+
   private func track(raw: CGFloat) {
     var raw = raw
     let width = width
@@ -299,7 +307,7 @@ final class TabPager: NSObject {
       track(raw: trackingBase + translation)
     case .ended, .cancelled, .failed:
       guard phase == .tracking else { return }
-      let velocity = recognizer.state == .ended ? recognizer.velocity(in: stage).x : 0
+      let velocity = releaseVelocity(recognizer.state == .ended ? recognizer.velocity(in: stage).x : 0)
       let target = PagerPhysics.snapTarget(offset: offset, velocity: velocity, width: width, hasLeft: hasLeft, hasRight: hasRight)
       settle(to: target, velocity: velocity)
     default:
