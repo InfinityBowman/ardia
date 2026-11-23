@@ -44,7 +44,9 @@ final class BrowseSession {
   func presentSearch(from origin: SearchOrigin, text: String = "", selectsAll: Bool = false, incognitoOnCancel: Bool? = nil) {
     HarnessProbe.mark("search.open")
     guard search == nil else { return }
-    search = SearchRequest(origin: origin, initialText: text, selectsAll: selectsAll, incognitoOnCancel: incognitoOnCancel)
+    let request = SearchRequest(origin: origin, initialText: text, selectsAll: selectsAll, incognitoOnCancel: incognitoOnCancel)
+    search = request
+    SearchMotion.begin(request)
   }
 
   func freezeOrder(_ ids: [UUID]) {
@@ -69,7 +71,9 @@ final class BrowseSession {
   }
 
   func dismissSearch() {
+    let wasShown = search != nil
     search = nil
+    if wasShown { SearchMotion.end() }
   }
 
   func showTitleFeedback(_ text: String, for duration: Duration = .seconds(1)) {

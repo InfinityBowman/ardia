@@ -232,6 +232,19 @@ final class FieldMorphView: UIView {
   }
 }
 
+@MainActor
+enum SearchMotion {
+  static weak var rider: KeyboardRiderController?
+
+  static func begin(_ request: BrowseSession.SearchRequest) {
+    rider?.prime(initialText: request.initialText, dims: request.origin == .page)
+  }
+
+  static func end() {
+    rider?.end()
+  }
+}
+
 final class KeyboardRiderController: UIViewController {
   var onDismiss: () -> Void = {}
   var onClosed: () -> Void = {}
@@ -259,6 +272,9 @@ final class KeyboardRiderController: UIViewController {
   private var generation = 0
   private var waitGeneration = 0
   private var settledLift: CGFloat?
+  private var pendingVisibility: Bool?
+  private var pendingGeneration = 0
+  private var requestedVisible = false
   private var isMorphing = false
   nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
 
@@ -289,6 +305,7 @@ final class KeyboardRiderController: UIViewController {
   static let dimClear: TimeInterval = 0.12
   static let defaultKeyboardLift: CGFloat = 336
   static let symbolWarmDelay: TimeInterval = 1.5
+  static let pendingLimit: TimeInterval = 0.6
 
   deinit {
     for observer in observers { NotificationCenter.default.removeObserver(observer) }
@@ -303,6 +320,7 @@ final class KeyboardRiderController: UIViewController {
 
   override func viewDidLoad() {
     super.viewDidLoad()
+    SearchMotion.rider = self
     dim.backgroundColor = .clear
     dim.onTap = { [weak self] in self?.onDismiss() }
     view.addSubview(dim)
@@ -458,6 +476,9 @@ final class KeyboardRiderController: UIViewController {
     self.growth = growth
     let iconsFrame = CGRect(x: 0, y: 0, width: view.bounds.width, height: growth.bandAboveBottom)
     if iconsHost.view.frame != iconsFrame { iconsHost.view.frame = iconsFrame }
+    requestedVisible = visible
+    if let pendingVisibility, pendingVisibility == visible { self.pendingVisibility = nil }
+    let visible = pendingVisibility ?? visible
     if isInteractive != self.isInteractive || host.view.isUserInteractionEnabled != isInteractive {
       self.isInteractive = isInteractive
       host.view.isUserInteractionEnabled = isInteractive
@@ -488,6 +509,40 @@ final class KeyboardRiderController: UIViewController {
       moves = true
     }
     if moves { spring(response: BrowseLayout.searchOpenResponse) { self.place(top: self.restingTop()) } }
+  }
+
+  func prime(initialText: String, dims: Bool) {
+    guard !isVisible, view.window != nil, var growth else { return }
+    growth.initialText = initialText
+    growth.dim = dims ? CGFloat(BrowseLayout.trayDim) : 0
+    self.growth = growth
+    holdsLift = false
+    heldLift = nil
+    dragOffset = 0
+    HarnessProbe.mark("search.primed")
+    hold(visible: true)
+    open()
+    CATransaction.flush()
+  }
+
+  func end() {
+    guard isVisible, growth?.handsBackToBar == true else { return }
+    HarnessProbe.mark("search.ended")
+    hold(visible: false)
+    close()
+    CATransaction.flush()
+  }
+
+  private func hold(visible: Bool) {
+    pendingVisibility = visible
+    pendingGeneration += 1
+    let holding = pendingGeneration
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.pendingLimit) { [weak self] in
+      guard let self, self.pendingGeneration == holding, self.pendingVisibility != nil else { return }
+      self.pendingVisibility = nil
+      guard self.requestedVisible != self.isVisible else { return }
+      self.requestedVisible ? self.open() : self.close()
+    }
   }
 
   private func hideField() {
@@ -573,6 +628,12 @@ final class KeyboardRiderController: UIViewController {
     isMorphing = true
     UIView.animate(withDuration: Self.bodyFade, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]) {
       self.body.alpha = 1
+    }
+    if growth.handsBackToBar, !reopening {
+      UIView.performWithoutAnimation { bandHost.view.alpha = 1 }
+      UIView.animate(withDuration: Self.bodyFade, delay: 0, options: [.beginFromCurrentState, .curveEaseIn]) {
+        self.bandHost.view.alpha = 0
+      }
     }
 
     spring(response: BrowseLayout.searchOpenResponse) {
@@ -785,7 +846,7 @@ final class KeyboardRiderController: UIViewController {
       scheduleKeyboardWait(Self.keyboardSwapWait)
       return
     }
-    if !change.hides { settledLift = keyboardLift }
+    if arrived { settledLift = keyboardLift }
     guard !holdsLift else { return }
     if change.duration < Self.instantFrame {
       spring(response: BrowseLayout.searchOpenResponse) { self.place(top: self.restingTop()) }

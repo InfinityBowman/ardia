@@ -209,7 +209,6 @@ struct SearchTrayHost: View {
     transaction.disablesAnimations = true
     withTransaction(transaction) {
       if shown == nil || isClosing { presentation += 1 }
-      if shown == nil { showsBarIcons = false }
       shown = request
       isClosing = false
       hasLanded = keyboardHeight > Self.keyboardThreshold
