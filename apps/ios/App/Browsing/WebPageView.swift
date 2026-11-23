@@ -149,6 +149,7 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
 
   override func didMoveToWindow() {
     super.didMoveToWindow()
+    if window != nil { PageRecession.shared.adopt(self) }
     wakePageWhenInWindow()
   }
 

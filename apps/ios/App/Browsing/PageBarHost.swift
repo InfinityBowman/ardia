@@ -77,6 +77,7 @@ final class BarScrollLink {
 
   func swipeChanged(_ dy: CGFloat) {
     guard hidden == 0 else { return }
+    if SearchMotion.drag(dy) { return }
     let up = min(dy, 0)
     lift = -Self.swipeReach * (1 - exp(up / Self.swipeReach))
     apply()
@@ -85,6 +86,12 @@ final class BarScrollLink {
   func swipeEnded(_ dy: CGFloat, velocity: CGFloat) {
     guard hidden == 0 else { return }
     let commits = dy <= -Self.swipeCommit || (dy < -8 && velocity <= Self.swipeFlick)
+    if let completes = SearchMotion.dragEnded(dy, velocity: velocity, commits: commits) {
+      if completes { onSwipeUp() }
+      lift = 0
+      apply()
+      return
+    }
     if commits { onSwipeUp() }
     let animator = UIViewPropertyAnimator(duration: 0.3, timingParameters: Self.spring(response: Self.settleResponse * 1.5))
     animator.addAnimations {

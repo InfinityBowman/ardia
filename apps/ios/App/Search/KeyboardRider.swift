@@ -243,6 +243,14 @@ enum SearchMotion {
   static func end() {
     rider?.end()
   }
+
+  static func drag(_ dy: CGFloat) -> Bool {
+    rider?.drag(dy) ?? false
+  }
+
+  static func dragEnded(_ dy: CGFloat, velocity: CGFloat, commits: Bool) -> Bool? {
+    rider?.dragEnded(dy, velocity: velocity, commits: commits)
+  }
 }
 
 final class KeyboardRiderController: UIViewController {
@@ -275,6 +283,9 @@ final class KeyboardRiderController: UIViewController {
   private var pendingVisibility: Bool?
   private var pendingGeneration = 0
   private var requestedVisible = false
+  private var isDraggingOpen = false
+  private var launchVelocity: CGFloat = 0
+  private var dragPeak: CGFloat = 0
   private var isMorphing = false
   nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
 
@@ -306,6 +317,11 @@ final class KeyboardRiderController: UIViewController {
   static let defaultKeyboardLift: CGFloat = 336
   static let symbolWarmDelay: TimeInterval = 1.5
   static let pendingLimit: TimeInterval = 0.6
+  static let dragIconsFade: TimeInterval = 0.07
+  static let dragRubber: CGFloat = 0.3
+  static let dragReverse: CGFloat = 150
+  static let dragReverseDistance: CGFloat = 12
+  static let recessionClose: Double = 0.26
 
   deinit {
     for observer in observers { NotificationCenter.default.removeObserver(observer) }
@@ -584,12 +600,22 @@ final class KeyboardRiderController: UIViewController {
     openTarget = expectedLift
     let target = openTop(lift: currentLift) + dragOffset
     let field = fieldRect
-    bandHost.view.layer.removeAllAnimations()
-    bandHost.view.alpha = 0
-    material.layer.removeAllAnimations()
-    material.alpha = 1
-    host.view.layer.removeAllAnimations()
-    host.view.alpha = 1
+    let launch = launchVelocity
+    launchVelocity = 0
+    if reopening {
+      UIView.animate(withDuration: Self.bodyFade, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]) {
+        self.bandHost.view.alpha = 0
+        self.material.alpha = 1
+        self.host.view.alpha = 1
+      }
+    } else {
+      bandHost.view.layer.removeAllAnimations()
+      bandHost.view.alpha = 0
+      material.layer.removeAllAnimations()
+      material.alpha = 1
+      host.view.layer.removeAllAnimations()
+      host.view.alpha = 1
+    }
 
     if UIAccessibility.isReduceMotionEnabled {
       iconsHost.view.alpha = 0
@@ -636,8 +662,13 @@ final class KeyboardRiderController: UIViewController {
       }
     }
 
-    spring(response: BrowseLayout.searchOpenResponse) {
+    let presentedTop = (riser.layer.presentation() ?? riser.layer).frame.minY
+    let distance = target - presentedTop
+    spring(response: BrowseLayout.searchOpenResponse, velocity: abs(distance) > 1 ? launch / distance : 0) {
       self.place(top: target)
+    }
+    if growth.dim > 0 {
+      PageRecession.shared.animate(to: 1, velocity: launch < 0 ? min(-launch / PageRecession.dragReach, 8) : 0)
     }
     spring(response: BrowseLayout.searchWidenResponse) {
       self.morph.frame = field
@@ -709,6 +740,7 @@ final class KeyboardRiderController: UIViewController {
     }
 
     if UIAccessibility.isReduceMotionEnabled {
+      PageRecession.shared.set(0)
       UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState]) {
         self.body.alpha = 0
         self.dim.backgroundColor = .clear
@@ -740,6 +772,9 @@ final class KeyboardRiderController: UIViewController {
 
     spring(response: BrowseLayout.searchCloseResponse) {
       self.place(top: self.closedTop)
+    }
+    if PageRecession.shared.progress > 0 {
+      PageRecession.shared.animate(to: 0, response: Self.recessionClose)
     }
     let speed = Double(view.window?.layer.speed ?? 1)
     DispatchQueue.main.asyncAfter(deadline: .now() + Self.closeSettle / max(speed, 0.01)) { [weak self] in
@@ -883,8 +918,89 @@ final class KeyboardRiderController: UIViewController {
     UserDefaults.standard.set(value, forKey: liftKey)
   }
 
-  private func spring(response: Double, _ animations: @escaping () -> Void) {
-    UIView.animate(springDuration: response, bounce: 0, initialSpringVelocity: 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: animations)
+  private func spring(response: Double, velocity: CGFloat = 0, _ animations: @escaping () -> Void) {
+    UIView.animate(springDuration: response, bounce: 0, initialSpringVelocity: velocity, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: animations)
+  }
+
+  func drag(_ dy: CGFloat) -> Bool {
+    guard view.window != nil, let growth, !UIAccessibility.isReduceMotionEnabled else { return false }
+    if !isDraggingOpen {
+      guard !isVisible, growth.handsBackToBar else { return false }
+      isDraggingOpen = true
+      dragPeak = 0
+      generation += 1
+      view.isHidden = false
+      HarnessProbe.follow(riser, as: "rider", for: 4)
+      UIView.performWithoutAnimation {
+        view.layoutIfNeeded()
+        if riser.bounds.size != view.bounds.size { sizeRiser() }
+        riser.layer.removeAllAnimations()
+        place(top: closedTop)
+        body.alpha = 1
+        material.alpha = 0
+        host.view.alpha = 0
+        bandHost.view.alpha = 1
+        iconsHost.view.alpha = 1
+        dim.backgroundColor = .clear
+        morph.layer.removeAllAnimations()
+        morph.frame = capsuleRect
+        morph.configure(growth, text: "", showsCaret: false)
+        morph.pose(open: false, growth: growth, fieldWidth: fieldWidth)
+        morph.setPlus(visible: true)
+        morph.setTile(visible: true)
+        morph.setSkin(visible: false)
+        morph.setText(visible: false)
+        morph.alpha = 1
+      }
+      UIView.animate(withDuration: Self.dragIconsFade, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
+        self.iconsHost.view.alpha = 0
+      }
+    }
+    dragPeak = min(dragPeak, dy)
+    let up = max(-dy, 0)
+    let reach = max(closedTop - openTop(lift: expectedLift), 1)
+    let travel = up <= reach ? up : reach + (up - reach) * Self.dragRubber
+    let share = min(up / PageRecession.dragReach, 1)
+    UIView.performWithoutAnimation {
+      riser.layer.removeAnimation(forKey: "position")
+      place(top: closedTop - travel)
+      dim.backgroundColor = UIColor.black.withAlphaComponent(CGFloat(BrowseLayout.trayDim) * share)
+    }
+    PageRecession.shared.set(share)
+    return true
+  }
+
+  func dragEnded(_ dy: CGFloat, velocity: CGFloat, commits: Bool) -> Bool? {
+    guard isDraggingOpen else { return nil }
+    isDraggingOpen = false
+    let reversed = velocity > Self.dragReverse && dy > dragPeak + Self.dragReverseDistance
+    if commits, !reversed {
+      launchVelocity = min(velocity, 0)
+      return true
+    }
+    generation += 1
+    let cancelling = generation
+    let top = (riser.layer.presentation() ?? riser.layer).frame.minY
+    let distance = closedTop - top
+    spring(response: BrowseLayout.searchCloseResponse, velocity: abs(distance) > 1 ? velocity / distance : 0) {
+      self.place(top: self.closedTop)
+    }
+    PageRecession.shared.animate(to: 0, response: Self.recessionClose, velocity: velocity > 0 ? -min(velocity / PageRecession.dragReach, 8) : 0)
+    UIView.animate(withDuration: Self.dimClear, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
+      self.dim.backgroundColor = .clear
+      self.iconsHost.view.alpha = 1
+    }
+    let speed = Double(view.window?.layer.speed ?? 1)
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.closeSettle / max(speed, 0.01)) { [weak self] in
+      guard let self, self.generation == cancelling, !self.isVisible, !self.isDraggingOpen else { return }
+      self.view.isHidden = true
+      self.iconsHost.view.alpha = 0
+      self.bandHost.view.alpha = 0
+      self.morph.alpha = 0
+      self.material.alpha = 1
+      self.host.view.alpha = 1
+    }
+    return false
   }
 }
 
