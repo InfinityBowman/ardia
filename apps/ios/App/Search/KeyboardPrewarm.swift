@@ -31,7 +31,7 @@ enum KeyboardPrewarm {
     field.inputView = UIView(frame: .zero)
     field.inputAssistantItem.leadingBarButtonGroups = []
     field.inputAssistantItem.trailingBarButtonGroups = []
-    window.addSubview(field)
+    (window.rootViewController?.view ?? window).addSubview(field)
     field.becomeFirstResponder()
     field.resignFirstResponder()
     field.removeFromSuperview()

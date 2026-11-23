@@ -252,6 +252,8 @@ struct DeckStageHost: UIViewControllerRepresentable {
       controller?.prewarm()
       try? await Task.sleep(for: LaunchPrewarm.delay)
       LaunchPrewarm.run(app: app, in: controller?.view.window)
+      try? await Task.sleep(for: SearchPrewarm.delay)
+      if let controller { SearchPrewarm.run(app: app, environment: controller.environment, in: controller.view.window) }
     }
     return controller
   }
