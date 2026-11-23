@@ -38,10 +38,8 @@ struct PageMenuPanel: View {
             .environment(\.pageMenuBarScheme, colorScheme)
             .environment(\.pageMenuShown, isShown)
             .overlay(alignment: .top) {
-              if isShown {
-                PageMenuBarRiders(addressHeight: capsuleHeight)
-                  .opacity(riders)
-              }
+              PageMenuBarRiders(addressHeight: capsuleHeight)
+                .opacity(riders)
             }
             .offset(y: (1 - rise) * travel + drag)
             .environment(\.pageMenuRise, rise)
