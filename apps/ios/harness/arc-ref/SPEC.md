@@ -631,6 +631,10 @@ dark mode, a black page; Arc 0.8–4.6 s, Ardia 7.6–12 s).** Times from the li
   bottom edge) 17 pt above it, 449 → 269. The + fades from ≈ 100 ms and is gone at 117; the mic shows at
   117 ms and the eyes at 150 as the right edge uncovers them.
 - Rows appear in one frame at ≈ 133 ms; the keyboard is first visible at ≈ 150 ms and up by ≈ 233 ms.
+- Drag mapping (owner's sixth recording, `rec6`, 120 fps, a slow swipe on a black page): the + rises with
+  the finger at ≈ 390 pt/s, 1 : 1, up to about where the field will rest (glyph y ≈ 300), then slows to a
+  rubber band past it (y 299 → 224 over ≈ 1.25 s, ≈ 75 pt) and settles back down to the field's place at
+  the lift.
 - Close (tap the page): the field drops on the 0.30 s spring, the card grows back (content scale
   0.951 → 1, 50 % at ≈ 75 ms, done ≈ 200 ms), rows ghost out within ≈ 50 ms and the tabs button and ^ are
   back on the bar's row by ≈ 80 ms.
@@ -742,9 +746,14 @@ system keyboard both apps get the system's slide.
   the panel rises on the 0.30 s spring launched at the finger's velocity, and the rows fade in from 120 ms
   over 30 ms. A drag that turns back down (velocity > 150 pt/s and 12 pt below its highest point) or doesn't
   commit springs back to the bar with the finger's velocity. SwiftUI visibility changes that arrive while a
-  bar drag is in progress wait for its end (`rider.visibleWhileDragging` marks one): the owner's recording
-  of the previous build showed the search material and rows rising mid-drag, the reopening path taken
-  while the finger was still down. Rows fade out over 50 ms on close (was 100).
+  bar drag is in progress wait for its end (`rider.visibleWhileDragging` marks one). The panel's material
+  and rows are hidden outright (not only transparent) for the whole drag and re-checked on every move
+  (`rider.bodyWhileDragging` marks a repair): the owner's phone still showed them mid-drag at 38914ce57,
+  which the simulator never reproduced. The 1 : 1 reach ends where the panel will open, from the last
+  keyboard height remembered; a height under 120 pt (a keyboard still launching, or a third-party
+  keyboard's bar) is no longer remembered or trusted, so it can't cut the 1 : 1 part short and make the
+  panel rubber-band high and drop at the lift, as on the owner's phone. Rows fade out over 50 ms on close
+  (was 100).
 - Measured in the simulator (iPhone 17 Pro, Release, 60 fps, panel top per display-link frame, medians of
   warm tap-opens; treat as relative): 50 % / 90 % / settled at 179–181 / 279–281 / 471–473 ms before this
   round and 105–106.5 / 214.5 / 414.6 ms after, against Arc's ≈ 100 / 200 / 400 ms. The worst main-thread

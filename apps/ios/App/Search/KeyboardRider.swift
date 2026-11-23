@@ -437,7 +437,7 @@ final class KeyboardRiderController: UIViewController {
   private var expectedLift: CGFloat {
     if keyboardOverlap > Self.keyboardThreshold { return keyboardOverlap }
     let stored = Self.rememberedLift
-    return stored > 0 ? max(CGFloat(stored), safeBottom) : Self.defaultKeyboardLift
+    return stored > Double(Self.keyboardThreshold) ? max(CGFloat(stored), safeBottom) : Self.defaultKeyboardLift
   }
 
   private func openTop(lift: CGFloat) -> CGFloat {
@@ -601,6 +601,7 @@ final class KeyboardRiderController: UIViewController {
     opensFromDrag = false
     let reopening = !view.isHidden && !fromDrag
     view.isHidden = false
+    revealPanelBody()
     UIView.performWithoutAnimation {
       view.layoutIfNeeded()
       if riser.bounds.size != view.bounds.size { sizeRiser() }
@@ -758,7 +759,7 @@ final class KeyboardRiderController: UIViewController {
     awaitingKeyboard = false
     let closing = generation
     if let settledLift {
-      Self.remember(settledLift)
+      if settledLift > Self.keyboardThreshold { Self.remember(settledLift) }
       self.settledLift = nil
     }
 
@@ -845,9 +846,24 @@ final class KeyboardRiderController: UIViewController {
     }
   }
 
+  private func revealPanelBody() {
+    material.isHidden = false
+    host.view.isHidden = false
+  }
+
+  private func concealPanelBody() {
+    material.layer.removeAllAnimations()
+    host.view.layer.removeAllAnimations()
+    material.alpha = 0
+    host.view.alpha = 0
+    material.isHidden = true
+    host.view.isHidden = true
+  }
+
   private func finishClose(_ closing: Int) {
     guard generation == closing, !isVisible else { return }
     view.isHidden = true
+    revealPanelBody()
     showField()
     iconsHost.view.alpha = 0
     bandHost.view.alpha = 0
@@ -960,8 +976,7 @@ final class KeyboardRiderController: UIViewController {
         riser.layer.removeAllAnimations()
         place(top: closedTop)
         body.alpha = 1
-        material.alpha = 0
-        host.view.alpha = 0
+        concealPanelBody()
         bandHost.view.alpha = 1
         iconsHost.view.alpha = 1
         dim.backgroundColor = .clear
@@ -978,6 +993,10 @@ final class KeyboardRiderController: UIViewController {
       UIView.animate(withDuration: Self.dragIconsFade, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
         self.iconsHost.view.alpha = 0
       }
+    }
+    if !material.isHidden || !host.view.isHidden || material.alpha > 0 || host.view.alpha > 0 {
+      HarnessProbe.mark("rider.bodyWhileDragging", "\(material.alpha) \(host.view.alpha)")
+      UIView.performWithoutAnimation { concealPanelBody() }
     }
     dragPeak = min(dragPeak, dy)
     let up = max(-dy, 0)
@@ -1018,6 +1037,7 @@ final class KeyboardRiderController: UIViewController {
     DispatchQueue.main.asyncAfter(deadline: .now() + Self.closeSettle / max(speed, 0.01)) { [weak self] in
       guard let self, self.generation == cancelling, !self.isVisible, !self.isDraggingOpen else { return }
       self.view.isHidden = true
+      self.revealPanelBody()
       self.iconsHost.view.alpha = 0
       self.bandHost.view.alpha = 0
       self.morph.alpha = 0
