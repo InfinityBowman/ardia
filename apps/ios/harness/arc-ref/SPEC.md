@@ -647,11 +647,18 @@ own behaviour: Arc's close in the earlier recording shows the same one-frame van
 system keyboard both apps get the system's slide.
 
 **Ardia now** (`App/Search/KeyboardRider.swift`, `SearchTray.swift`, `SuggestionRowView.swift`):
-- Tap +: the panel rises on its own critically damped spring (response 0.30 s) from the bar to where the
+- Tap +: the open starts on the touch-up. `BrowseSession.presentSearch` primes the rider directly
+  (`SearchMotion.begin`) and flushes the transaction, so the springs reach the render server ≈ 0.2 ms after
+  the release and the first motion is on the next display frame; SwiftUI's own update arrives later and only
+  confirms it (a primed state is held for up to 0.6 s until SwiftUI agrees). Before, the open waited for
+  `search` → `onChange` → `present()` → the next update, and its first frame came after a 45–80 ms pass with
+  the panel already ≈ 110 pt up. `dismissSearch` starts the close the same way.
+- The panel rises on its own critically damped spring (response 0.30 s) from the bar to where the
   keyboard will end, and holds there until the keyboard reports a real frame. The target is the last height a
   keyboard settled at (`searchPanel.keyboardLift`, written once per close; 336 pt before any keyboard has
-  been seen). A frame taller than 120 pt retargets the spring at once. A smaller frame (a hardware keyboard's
-  bar) is accepted only if nothing taller follows within 0.3 s. Hides are ignored while waiting, and the wait
+  been seen; only a frame that arrived counts, so the zero-height frame at dismissal no longer stores 34 pt
+  and turns the next open into a two-step rise). A frame taller than 120 pt retargets the spring at once. A
+  smaller frame (a hardware keyboard's bar) is accepted only if nothing taller follows within 0.3 s. Hides are ignored while waiting, and the wait
   gives up after 3 s. Once the keyboard has arrived the panel follows later frames on the keyboard's own curve,
   or on the 0.30 s spring when a frame comes with no duration (third-party keyboards send several of those).
   A hide while the field is still editing (a keyboard switch) holds the panel for 0.6 s before it drops.
@@ -697,8 +704,27 @@ system keyboard both apps get the system's slide.
   - a second change (`301@0.1,250@1.0:0,301@1.6`): the panel follows down 51 pt and back on the spring;
   - a small bar only (`55@0.1:0`): settles 0.3 s later just above the bar;
   - a switch (`301@0.1,0@1.0:0,301@1.3:0`): no movement.
-- Not built: the swipe-up drag that follows the finger (Ardia's bar still rubber-bands up to 60 pt and
-  opens on release), and the page receding into a card.
+- The page recedes into a card behind search (`App/Search/PageRecession.swift`): the page container's
+  `sublayerTransform` scales it to 0.952 about the bottom of the status bar, and a mask layer clips it to a
+  card with a continuous 24 pt corner, both on a 0.25 s critically damped Core Animation spring that starts
+  from the presented values, so a close mid-open or a reopen mid-close turns around without a jump. It
+  grows back on a 0.26 s spring with the close. The backdrop behind the card is the profile surface, not
+  Arc's `#17161F`.
+- Swipe up on the bar: the riser appears at the bar line as the bar's band with the + tile and rides the
+  finger 1 : 1 to where the panel will open, with a 0.3 rubber band past it; the tabs button and ^ fade in
+  70 ms, the dim and the page card follow the drag (the card is fully receded at 160 pt of travel). On release
+  it opens if the bar's swipe commits (28 pt or a flick), launching the panel's spring with the finger's
+  velocity; a drag that turns back down (velocity > 150 pt/s and 12 pt below its highest point) or doesn't
+  commit springs back to the bar with the finger's velocity. The + capsule keeps its bar size during the
+  drag and widens after the lift, as Arc's does; unlike Arc, the suggestion rows don't show during the drag.
+- Measured in the simulator (iPhone 17 Pro, Release, 60 fps, panel top per display-link frame, medians of
+  warm tap-opens; treat as relative): 50 % / 90 % / settled at 179–181 / 279–281 / 471–473 ms before this
+  round and 105–106.5 / 214.5 / 414.6 ms after, against Arc's ≈ 100 / 200 / 400 ms. The worst main-thread
+  pass on the open fell from 78 to 43 ms. A cold first open after launch stalls the main thread ≈ 195 ms
+  while the keyboard starts, but the panel's springs already run in the render server, and the film shows a
+  frame every 16 ms from the first motion. Interruptions (close mid-open, reopen mid-close) give continuous
+  trajectories in film. Xcode's Animation Hitches instrument doesn't run on the simulator, so hitch counts
+  are display-link gaps, and the first-frame latency on a device is still to be confirmed there.
 
 ### 6.6 Page menu growing out of the bar (`s4` menu_open, iPad frames; the iPhone recording has no page menu)
 
