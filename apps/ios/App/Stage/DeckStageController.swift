@@ -851,6 +851,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
 
   private func close(_ id: UUID, animated: Bool, velocity: CGFloat = 0) {
     guard let index = order.firstIndex(of: id) else { return }
+    HarnessProbe.mark("deck.closeCard")
     let card = cards[id]
     let header = headers[id]
     let focus = TabsDeckGeometry.scrollAfterRemoving(index: index, scroll: Int(scroll.rounded()), remaining: order.count - 1)

@@ -75,6 +75,10 @@ extension AppModel {
       surface = .tabSwitcher
     case "archive":
       sheet = .archive
+    case "dismiss":
+      sheet = nil
+    case "home":
+      surface = .search
     case "spaces":
       sheet = .syncedSpaces
     case "received":

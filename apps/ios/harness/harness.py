@@ -30,9 +30,9 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 IOS = os.path.dirname(HERE)
 PROJECT = os.path.join(IOS, "Ardia.xcodeproj")
-SIM_NAME = "Ardia Harness"
+SIM_NAME = os.environ.get("ARDIA_HARNESS_SIM", "Ardia Harness")
 BUNDLE = "com.jacobmaynard.ardia"
-DERIVED = os.path.expanduser("~/Library/Caches/ardia-harness/DerivedData")
+DERIVED = os.path.expanduser(os.environ.get("ARDIA_HARNESS_DERIVED", "~/Library/Caches/ardia-harness/DerivedData"))
 APP = os.path.join(DERIVED, "Build/Products/Release-iphonesimulator/Ardia.app")
 RUNS = os.path.join(HERE, "runs")
 PORT = 8765
@@ -496,6 +496,29 @@ def scenario_page_menu(sim, cycles=2):
     return steps
 
 
+def scenario_deck_close(sim, closes=3):
+    """Open the switcher, flick the focused card up to close it, three times; the deck reflows each time."""
+    tabs = find(sim, "Tabs")
+    if not tabs:
+        sys.exit("no Tabs button on screen")
+    batch(sim, [f"tap -x {tabs['x']:.0f} -y {tabs['y']:.0f}", "sleep 1.2"])
+    flick = "swipe --start-x 200 --start-y 560 --end-x 200 --end-y 260 --duration 0.12 --delta 10 --pre-delay 0 --post-delay 0"
+    steps = []
+    for _ in range(closes):
+        steps += [flick, "sleep 0.9"]
+    steps.append("sleep 0.5")
+    return steps
+
+
+SURFACES_SCRIPT = ",".join(["wait:8", "switcher", "wait:1", "archive", "wait:1.2", "dismiss", "wait:1.2", "browse", "wait:1",
+                            "incognito", "wait:1.5", "browse", "wait:1.2", "switcher", "wait:1", "empty", "wait:1.5", "home", "wait:1.5"])
+
+
+def scenario_deck_surfaces(sim):
+    """In-app script: switcher, Archive up and down, back to the page, Incognito's switcher, the empty switcher, the start page."""
+    return ["sleep 16"]
+
+
 def start_download(sim):
     more = find(sim, "Page Menu")
     if not more:
@@ -579,8 +602,11 @@ SCENARIOS = {
     "deck-switch": scenario_deck_switch,
     "search-toggle": scenario_search_toggle,
     "deck-turnback": scenario_deck_turnback,
+    "deck-close": scenario_deck_close,
+    "deck-surfaces": scenario_deck_surfaces,
 }
 LAUNCH_ARGS["deck-turnback"] = ["-ArdiaDeck", TURNBACK_SCRIPT]
+LAUNCH_ARGS["deck-surfaces"] = ["-ArdiaDeck", SURFACES_SCRIPT]
 LAUNCH_ARGS["download-ring"] = ["-ArdiaHarnessOpen", f"{MEDIA}video.html?seconds={DOWNLOAD_SECONDS}"]
 for _name in ("idle-scroll", "download-scroll", "idle-swipe", "download-swipe"):
     LAUNCH_ARGS[_name] = ["-ArdiaHarnessOpen", f"{MEDIA}video.html?seconds={BUSY_DOWNLOAD_SECONDS}"]
@@ -940,7 +966,7 @@ def run(args):
         pid = next((line.split()[0] for line in listing.splitlines() if BUNDLE in line and line.split()[0].isdigit()), None)
         if pid:
             tracers.append(subprocess.Popen(["xcrun", "xctrace", "record", "--template", "Time Profiler", "--device", sim,
-                                             "--attach", pid, "--output", os.path.join(directory, "trace.trace")],
+                                             "--attach", "Ardia", "--output", os.path.join(directory, "trace.trace")],
                                             stdout=open(os.path.join(directory, "trace.log"), "w"), stderr=subprocess.STDOUT))
             deadline = time.time() + 8
             while time.time() < deadline and "Ctrl-C" not in open(os.path.join(directory, "trace.log")).read():

@@ -41,6 +41,7 @@ final class ToastCenter {
       return
     }
     current = toast
+    HarnessProbe.mark("toast.show")
     AccessibilityNotification.Announcement(toast.detail.map { "\(toast.message), \($0)" } ?? toast.message).post()
     scheduleDismissal(of: toast.id, after: toast.duration)
   }

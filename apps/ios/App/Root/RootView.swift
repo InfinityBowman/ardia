@@ -73,6 +73,7 @@ struct RootView: View {
       }
     }
     .onChange(of: app.surface) { _, surface in HarnessProbe.mark("surface", "\(surface)") }
+    .onChange(of: app.sheet) { _, sheet in HarnessProbe.mark("sheet", sheet.map { "\($0)" } ?? "none") }
     .onChange(of: app.sync.snapshot.search) { _, _ in app.applySyncedSearch() }
     .onChange(of: app.sync.selectedProfileId) { _, _ in app.applySyncedSearch() }
     .onChange(of: app.sync.isEnabled) { _, _ in app.applySyncedSearch() }
