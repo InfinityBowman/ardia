@@ -247,9 +247,11 @@ struct DeckStageHost: UIViewControllerRepresentable {
     app.usesDeckStage = true
     let controller = DeckStageController(app: app)
     app.deckStage = controller
-    Task { @MainActor [weak controller] in
+    Task { @MainActor [weak controller, app] in
       try? await Task.sleep(for: .seconds(1.5))
       controller?.prewarm()
+      try? await Task.sleep(for: ArchivePrewarm.delay)
+      ArchivePrewarm.run(app: app, in: controller?.view.window)
     }
     return controller
   }
