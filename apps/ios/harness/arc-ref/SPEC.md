@@ -612,29 +612,27 @@ edge at its bar size (76 × 37), 812 → 549 over 0.75 s (≈ 350 pt/s); the tab
 (frame 529, ≈ 165 ms after the lift, almost full height in one frame) and the panel rides up with it,
 539 → 235 over ≈ 350 ms. This is the sequential open; a tap is not.
 
-**Slow swipe up from the bar, system keyboard (owner's fifth recording, `rec5`, 2026-11-22, iPhone, 60 fps,
-dark mode, a black page; Arc 0.8–4.6 s, Ardia 7.6–12 s).** Times from the lift (the last moving frame).
-- Drag start: the tabs button and ^ are gone within 2 frames (≤ 33 ms); only the + capsule stays, at its bar
-  size (75 × 38), its top 13 pt below the panel's top edge.
-- Mid-drag there are no rows and no field. A full-width panel rises with the finger 1 : 1 from the bar line
-  (797 → 449 over ≈ 2.4 s): a heavy, dark blur of what is behind it (the page's bright button shows through
-  as a soft glow, the backdrop's colour at the sides), with a 1 px lighter hairline on its straight top edge.
-  It is a cover, not a clip: the receded card stays whole underneath. The card recedes linearly with the
-  first ≈ 160 pt of travel (content scale 1 → 0.952 about the status bar's bottom; its left edge 0 → 19 pt
-  on this page, 10 pt on a white page) and then holds.
-- At the lift: the panel turns into the search panel's lighter translucent material with rounded top
-  corners within 1 frame (the page shows faintly through it for ≈ 80 ms, then the blur covers it); the +
-  capsule becomes the field in place, "+ |Sea…" with the caret from the first frame. The field widens
-  75 → 370 on a critically damped spring of response ≈ 0.27 s from rest (89 at 17 ms, 173 at 50, 248 at 83,
-  302 at 117, 345 at 167, 356 at 200 ms), and the field's top rises 463 → 286 on a ≈ 0.30 s critically
-  damped spring from rest (50 % at ≈ 83 ms, 90 % at ≈ 190 ms, settled ≈ 350 ms), the panel's top (the card's
-  bottom edge) 17 pt above it, 449 → 269. The + fades from ≈ 100 ms and is gone at 117; the mic shows at
-  117 ms and the eyes at 150 as the right edge uncovers them.
-- Rows appear in one frame at ≈ 133 ms; the keyboard is first visible at ≈ 150 ms and up by ≈ 233 ms.
-- Drag mapping (owner's sixth recording, `rec6`, 120 fps, a slow swipe on a black page): the + rises with
-  the finger at ≈ 390 pt/s, 1 : 1, up to about where the field will rest (glyph y ≈ 300), then slows to a
-  rubber band past it (y 299 → 224 over ≈ 1.25 s, ≈ 75 pt) and settles back down to the field's place at
-  the lift.
+**Swipe up from the bar, owner's fifth, sixth and eighth recordings (`rec5`, `rec6`, `rec8`, 2026-11-22/23,
+iPhone 17 Pro, 402 × 874 pt, dark mode).** The halves of these recordings were first labelled the wrong way
+round. Arc is the one on cloudflare.com (the app switcher calls that card "Arc Search", and its page menu has
+Summarize and Pin); Ardia is the one on vercel.com with magnifier recent-search rows. Everything below is
+from Arc's half. Positions are the + glyph's centre.
+- Mid-drag the panel is the search panel's own material with its suggestion rows: the rows are there from
+  the first moving frame and rise with the panel under the + capsule (first row ≈ 67 pt below the + centre,
+  rows ≈ 56 pt apart). There is no field; the + stays a bar-sized capsule at the panel's top. The tabs
+  button and ^ fade within ≈ 4 frames, and the page recedes into its card.
+- Drag mapping: the + follows the finger 1 : 1 until it is ≈ 40 % of the screen height above the bottom
+  (glyph y ≈ 520–580 of 874), far below where the field rests. Past that it resists hard: in the slow
+  drag (`rec6`, 120 fps) it crept from ≈ 520 to ≈ 382 for the rest of the screen; in the fast stroke
+  from the bottom edge to the top (`rec8`, 60 fps) it covered 829 → 627 in 3 frames, then 579, 547, 520, 499,
+  491, 479, 464, 458, 454 and crept to 387 while the finger stayed near the top. The ceiling is
+  ≈ 44 % from the top in both.
+- Release (`rec8`): within ≈ 4 frames (≈ 67 ms) the + capsule widens in place into the field with
+  "Search…". The panel drops back ≈ 70 pt as the rubber band lets go, then the keyboard appears
+  (≈ 100 ms after the lift) and the panel rides up with it. The field's centre settles at ≈ 316 (36 %)
+  ≈ 300 ms after the lift. The rows stay up throughout, with no fade.
+- `rec5`'s halves were swapped as well, so the timings this section used to give for "Arc's" slow
+  swipe-up (bare blur band, rows at 133 ms) were Ardia's own and have been removed.
 - Close (tap the page): the field drops on the 0.30 s spring, the card grows back (content scale
   0.951 → 1, 50 % at ≈ 75 ms, done ≈ 200 ms), rows ghost out within ≈ 50 ms and the tabs button and ^ are
   back on the bar's row by ≈ 80 ms.
@@ -737,23 +735,22 @@ system keyboard both apps get the system's slide.
   from the presented values, so a close mid-open or a reopen mid-close turns around without a jump. It
   grows back on a 0.26 s spring with the close. The backdrop behind the card is the profile surface, not
   Arc's `#17161F`.
-- Swipe up on the bar: the riser appears at the bar line as the bar's band (its blur, gradient and top
-  edge, stretched full height) with the + tile, no rows and no field, and rides the finger 1 : 1 to where
-  the panel will open, with a 0.3 rubber band past it; the tabs button and ^ fade in 30 ms, the dim and the
-  page card follow the drag (the card is fully receded at 160 pt of travel). On release it opens if the
-  bar's swipe commits (28 pt or a flick): the band gives way to the search material over 40 ms, the + tile
-  turns into the field in place with "Search…" and the caret from the lift and widens on the 0.25 s spring,
-  the panel rises on the 0.30 s spring launched at the finger's velocity, and the rows fade in from 120 ms
-  over 30 ms. A drag that turns back down (velocity > 150 pt/s and 12 pt below its highest point) or doesn't
-  commit springs back to the bar with the finger's velocity. SwiftUI visibility changes that arrive while a
-  bar drag is in progress wait for its end (`rider.visibleWhileDragging` marks one). The panel's material
-  and rows are hidden outright (not only transparent) for the whole drag and re-checked on every move
-  (`rider.bodyWhileDragging` marks a repair): the owner's phone still showed them mid-drag at 38914ce57,
-  which the simulator never reproduced. The 1 : 1 reach ends where the panel will open, from the last
-  keyboard height remembered; a height under 120 pt (a keyboard still launching, or a third-party
-  keyboard's bar) is no longer remembered or trusted, so it can't cut the 1 : 1 part short and make the
-  panel rubber-band high and drop at the lift, as on the owner's phone. Rows fade out over 50 ms on close
-  (was 100).
+- Swipe up on the bar: the riser appears at the bar line with the + tile, and the search material and a
+  preview of the empty-field suggestion rows fade in over 60 ms with the tabs button and ^ fading out. The
+  preview is a non-interactive `SearchTray` for an empty `.page` request in its own hosting view, masked
+  below the field so no field shows. The + rides the finger 1 : 1 until it is 60 % of the screen height
+  from the top. Past that it follows a rubber band, `span · (1 − 1 / (x · 0.55 / span + 1))` with
+  span = 0.35 × screen height, so it creeps from ≈ 524 to ≈ 386 as the finger reaches the top, whatever
+  keyboard height is remembered (checked with none, 40, 216 and 336 pt). The dim and the page card follow
+  the drag (the card is fully receded at 160 pt of travel). On release it opens if the bar's swipe commits
+  (28 pt or a flick). The + tile turns into the field in place with "Search…" and the caret, and widens
+  on the 0.25 s spring. The panel springs to its place above the keyboard on the 0.30 s spring, launched
+  at the finger's velocity. The live rows take over at once, under the preview, which holds 150 ms and
+  then fades over 100 ms. A drag that turns back down (velocity > 150 pt/s and 12 pt below its highest
+  point), or one that doesn't commit, springs back to the bar with the finger's velocity while the material
+  and the preview fade. SwiftUI visibility changes that arrive mid-drag wait for its end
+  (`rider.visibleWhileDragging` marks one). A remembered keyboard height under 120 pt is neither stored
+  nor trusted. Rows fade out over 50 ms on close.
 - Measured in the simulator (iPhone 17 Pro, Release, 60 fps, panel top per display-link frame, medians of
   warm tap-opens; treat as relative): 50 % / 90 % / settled at 179–181 / 279–281 / 471–473 ms before this
   round and 105–106.5 / 214.5 / 414.6 ms after, against Arc's ≈ 100 / 200 / 400 ms. The worst main-thread

@@ -59,6 +59,7 @@ struct SearchTrayHost: View {
             growth: growth(panelHeight: maxHeight, safeBottom: safeBottom),
             onDismiss: { app.cancelSearch() },
             onClosed: { finishClosing() },
+            preview: { AnyView(previewTray(maxHeight: maxHeight, safeBottom: safeBottom)) },
             content: riderContent(maxHeight: maxHeight, liveLift: liveLift, safeBottom: safeBottom),
             icons: barIcons(safeBottom: safeBottom),
             band: SearchBarBand(height: BrowseLayout.barHeight(safeBottom: safeBottom), isShown: handsBackToBar)
@@ -123,6 +124,23 @@ struct SearchTrayHost: View {
         .accessibilityAddTraits(.isModal)
       }
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .ignoresSafeArea()
+    .environment(app)
+    .environment(\.profileLook, look)
+    .environment(\.usesGlass, usesGlass)
+    .environment(\.screenLayout, screenLayout)
+  }
+
+  private func previewTray(maxHeight: CGFloat, safeBottom: CGFloat) -> some View {
+    SearchTray(
+      request: BrowseSession.SearchRequest(origin: .page, initialText: "", selectsAll: false, incognitoOnCancel: nil),
+      isFocused: .constant(false),
+      maxHeight: maxHeight,
+      dismissDrag: DragGesture(),
+      pull: TrayPull(changed: { _ in }, ended: { _, _ in }),
+      barLineAboveBottom: BrowseLayout.barLine(safeBottom: safeBottom) - safeBottom
+    )
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .ignoresSafeArea()
     .environment(app)

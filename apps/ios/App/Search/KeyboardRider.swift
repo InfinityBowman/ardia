@@ -41,6 +41,7 @@ struct KeyboardRider<Content: View, Icons: View & Equatable, Band: View & Equata
   var growth: RiderGrowth
   var onDismiss: () -> Void
   var onClosed: () -> Void = {}
+  var preview: () -> AnyView = { AnyView(EmptyView()) }
   let content: Content
   let icons: Icons
   let band: Band
@@ -61,6 +62,7 @@ struct KeyboardRider<Content: View, Icons: View & Equatable, Band: View & Equata
     let coordinator = context.coordinator
     controller.onDismiss = onDismiss
     controller.onClosed = onClosed
+    controller.makePreview = preview
     if coordinator.icons != icons {
       coordinator.icons = icons
       controller.setIcons(AnyView(icons))
@@ -256,10 +258,13 @@ enum SearchMotion {
 final class KeyboardRiderController: UIViewController {
   var onDismiss: () -> Void = {}
   var onClosed: () -> Void = {}
+  var makePreview: () -> AnyView = { AnyView(EmptyView()) }
 
   private let host = UIHostingController(rootView: AnyView(EmptyView()))
   private let iconsHost = UIHostingController(rootView: AnyView(EmptyView()))
   private let bandHost = UIHostingController(rootView: AnyView(EmptyView()))
+  private let previewHost = UIHostingController(rootView: AnyView(EmptyView()))
+  private let previewMask = UIView()
   private let dim = RiderDimView()
   private let riser = PassThroughView()
   private let body = PassThroughView()
@@ -318,11 +323,13 @@ final class KeyboardRiderController: UIViewController {
   static let defaultKeyboardLift: CGFloat = 336
   static let symbolWarmDelay: TimeInterval = 1.5
   static let pendingLimit: TimeInterval = 0.6
-  static let dragIconsFade: TimeInterval = 0.03
+  static let dragIconsFade: TimeInterval = 0.06
   static let dragHandover: TimeInterval = 0.04
-  static let dragRowsDelay: TimeInterval = 0.12
-  static let dragRowsFade: TimeInterval = 0.03
-  static let dragRubber: CGFloat = 0.3
+  static let previewHold: TimeInterval = 0.15
+  static let previewFade: TimeInterval = 0.1
+  static let dragWall: CGFloat = 0.6
+  static let dragRubberSlope: CGFloat = 0.55
+  static let dragRubberSpan: CGFloat = 0.35
   static let dragReverse: CGFloat = 150
   static let dragReverseDistance: CGFloat = 12
   static let recessionClose: Double = 0.26
@@ -361,6 +368,16 @@ final class KeyboardRiderController: UIViewController {
     body.addSubview(material)
     body.addSubview(host.view)
     host.didMove(toParent: self)
+    addChild(previewHost)
+    previewHost.view.backgroundColor = .clear
+    previewHost.view.isUserInteractionEnabled = false
+    previewHost.view.isHidden = true
+    previewHost.view.accessibilityElementsHidden = true
+    if #available(iOS 16.4, *) { previewHost.safeAreaRegions = [] }
+    previewMask.backgroundColor = .black
+    previewHost.view.mask = previewMask
+    body.addSubview(previewHost.view)
+    previewHost.didMove(toParent: self)
     maskBase.shape.fillRule = .evenOdd
     maskBase.shape.fillColor = UIColor.black.cgColor
     maskHole.backgroundColor = .black
@@ -424,6 +441,7 @@ final class KeyboardRiderController: UIViewController {
     body.frame = riser.bounds
     material.frame = body.bounds
     host.view.frame = body.bounds
+    previewHost.view.frame = body.bounds
     bandHost.view.frame = riser.bounds
   }
 
@@ -600,8 +618,8 @@ final class KeyboardRiderController: UIViewController {
     let fromDrag = opensFromDrag && !view.isHidden
     opensFromDrag = false
     let reopening = !view.isHidden && !fromDrag
+    if !fromDrag { dropPreview() }
     view.isHidden = false
-    revealPanelBody()
     UIView.performWithoutAnimation {
       view.layoutIfNeeded()
       if riser.bounds.size != view.bounds.size { sizeRiser() }
@@ -624,9 +642,15 @@ final class KeyboardRiderController: UIViewController {
         self.bandHost.view.alpha = 0
         self.material.alpha = 1
       }
-      later(Self.dragRowsDelay, over: Self.dragRowsFade) {
-        self.host.view.alpha = 1
-      }
+      host.view.layer.removeAllAnimations()
+      host.view.alpha = 1
+      let handing = generation
+      later(Self.previewHold, over: Self.previewFade, {
+        self.previewHost.view.alpha = 0
+      }, completion: { [weak self] in
+        guard let self, self.generation == handing else { return }
+        self.dropPreview()
+      })
     } else {
       bandHost.view.layer.removeAllAnimations()
       bandHost.view.alpha = 0
@@ -846,24 +870,33 @@ final class KeyboardRiderController: UIViewController {
     }
   }
 
-  private func revealPanelBody() {
-    material.isHidden = false
-    host.view.isHidden = false
+  private func showPreview() {
+    guard let growth else { return }
+    previewHost.rootView = makePreview()
+    previewHost.view.layer.removeAllAnimations()
+    previewHost.view.frame = body.bounds
+    let rowsTop = growth.fieldTop + growth.fieldHeight
+    previewMask.frame = CGRect(x: 0, y: rowsTop, width: body.bounds.width, height: max(body.bounds.height - rowsTop, 0))
+    previewHost.view.isHidden = false
+    previewHost.view.layoutIfNeeded()
   }
 
-  private func concealPanelBody() {
-    material.layer.removeAllAnimations()
-    host.view.layer.removeAllAnimations()
-    material.alpha = 0
-    host.view.alpha = 0
-    material.isHidden = true
-    host.view.isHidden = true
+  private func dropPreview() {
+    previewHost.view.layer.removeAllAnimations()
+    previewHost.view.isHidden = true
+    previewHost.view.alpha = 0
+    previewHost.rootView = AnyView(EmptyView())
+  }
+
+  private func dragRubber(_ beyond: CGFloat) -> CGFloat {
+    let span = screenHeight * Self.dragRubberSpan
+    return span * (1 - 1 / (beyond * Self.dragRubberSlope / span + 1))
   }
 
   private func finishClose(_ closing: Int) {
     guard generation == closing, !isVisible else { return }
     view.isHidden = true
-    revealPanelBody()
+    dropPreview()
     showField()
     iconsHost.view.alpha = 0
     bandHost.view.alpha = 0
@@ -976,7 +1009,12 @@ final class KeyboardRiderController: UIViewController {
         riser.layer.removeAllAnimations()
         place(top: closedTop)
         body.alpha = 1
-        concealPanelBody()
+        material.layer.removeAllAnimations()
+        material.alpha = 0
+        host.view.layer.removeAllAnimations()
+        host.view.alpha = 0
+        showPreview()
+        previewHost.view.alpha = 0
         bandHost.view.alpha = 1
         iconsHost.view.alpha = 1
         dim.backgroundColor = .clear
@@ -992,16 +1030,14 @@ final class KeyboardRiderController: UIViewController {
       }
       UIView.animate(withDuration: Self.dragIconsFade, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
         self.iconsHost.view.alpha = 0
+        self.material.alpha = 1
+        self.previewHost.view.alpha = 1
       }
-    }
-    if !material.isHidden || !host.view.isHidden || material.alpha > 0 || host.view.alpha > 0 {
-      HarnessProbe.mark("rider.bodyWhileDragging", "\(material.alpha) \(host.view.alpha)")
-      UIView.performWithoutAnimation { concealPanelBody() }
     }
     dragPeak = min(dragPeak, dy)
     let up = max(-dy, 0)
-    let reach = max(closedTop - openTop(lift: expectedLift), 1)
-    let travel = up <= reach ? up : reach + (up - reach) * Self.dragRubber
+    let reach = max(closedTop + capsuleRect.midY - screenHeight * Self.dragWall, 1)
+    let travel = up <= reach ? up : reach + dragRubber(up - reach)
     let share = min(up / PageRecession.dragReach, 1)
     UIView.performWithoutAnimation {
       riser.layer.removeAnimation(forKey: "position")
@@ -1032,12 +1068,14 @@ final class KeyboardRiderController: UIViewController {
     UIView.animate(withDuration: Self.dimClear, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
       self.dim.backgroundColor = .clear
       self.iconsHost.view.alpha = 1
+      self.material.alpha = 0
+      self.previewHost.view.alpha = 0
     }
     let speed = Double(view.window?.layer.speed ?? 1)
     DispatchQueue.main.asyncAfter(deadline: .now() + Self.closeSettle / max(speed, 0.01)) { [weak self] in
       guard let self, self.generation == cancelling, !self.isVisible, !self.isDraggingOpen else { return }
       self.view.isHidden = true
-      self.revealPanelBody()
+      self.dropPreview()
       self.iconsHost.view.alpha = 0
       self.bandHost.view.alpha = 0
       self.morph.alpha = 0
