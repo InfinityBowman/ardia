@@ -41,6 +41,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
   private var transitions: [UIViewPropertyAnimator] = []
   private var transitionGeneration = 0
   private var headerTucks: [UUID: CGFloat] = [:]
+  private var closing: Set<UUID> = []
   private var geometry: TabsDeckGeometry { stage.geometry }
   private var shownSpace: String?
   private var observing = false
@@ -230,7 +231,9 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     UIView.performWithoutAnimation {
       layoutCards(progress: 0)
       setChrome(alpha: 0, backdrop: 0)
+      setPageBar(true)
     }
+    swapBars(toPage: false)
     runOpen(headersDelayed: true)
     commitNow()
   }
@@ -294,7 +297,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
       HarnessProbe.mark("deck.return")
       stopTransition()
       phase = .returning(id)
-      setPageBar(true)
+      swapBars(toPage: true)
       runHome(to: id, duration: Self.returnDuration, timing: Self.returnCurve)
       commitNow()
       return
@@ -303,7 +306,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     stopSettling()
     guard phase == .settled || phase.isOpening, order.contains(id) else { return }
     phase = .closing(id)
-    setPageBar(true)
+    swapBars(toPage: true)
     if UIAccessibility.isReduceMotionEnabled {
       app.beginOpening(id)
       finishClosing(on: id)
@@ -328,7 +331,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     guard order.contains(id) else { return }
     stopTransition()
     phase = .opening(id)
-    setPageBar(false)
+    swapBars(toPage: false)
     let next = sourceOrder
     if next != order, next.last == id {
       order = next
@@ -429,7 +432,7 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
 
   private var sourceOrder: [UUID] {
     let needle = stage.query.trimmingCharacters(in: .whitespacesAndNewlines)
-    let ordered = app.deckOrder
+    let ordered = closing.isEmpty ? app.deckOrder : app.deckOrder.filter { !closing.contains($0.id) }
     guard !needle.isEmpty else { return ordered.map(\.id) }
     return ordered.filter { TabText.matches($0, needle) }.map(\.id)
   }
@@ -644,10 +647,34 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
   }
 
   private func setPageBar(_ page: Bool) {
+    barSwap?.stopAnimation(true)
+    barSwap = nil
     barShell.alpha = page ? 0 : 1
     barShell.isUserInteractionEnabled = !page
     pageBarShell.alpha = page ? 1 : 0
     stopRise()
+  }
+
+  private var barSwap: UIViewPropertyAnimator?
+  private static let barSwapDuration: TimeInterval = 0.1
+  private static let barSwapHold: TimeInterval = 0.05
+
+  private func swapBars(toPage page: Bool) {
+    guard !UIAccessibility.isReduceMotionEnabled else { return setPageBar(page) }
+    let fromBar = barSwap?.isRunning == true ? (barShell.layer.presentation()?.opacity ?? Float(barShell.alpha)) : Float(barShell.alpha)
+    barSwap?.stopAnimation(true)
+    barSwap = nil
+    stopRise()
+    barShell.isUserInteractionEnabled = !page
+    barShell.alpha = CGFloat(fromBar)
+    pageBarShell.alpha = 1 - CGFloat(fromBar)
+    let animator = UIViewPropertyAnimator(duration: Self.barSwapDuration, curve: .easeOut) {
+      self.barShell.alpha = page ? 0 : 1
+      self.pageBarShell.alpha = page ? 1 : 0
+    }
+    animator.isInterruptible = true
+    barSwap = animator
+    animator.startAnimation(afterDelay: page && fromBar > 0.99 ? Self.barSwapHold : 0)
   }
 
   private static let riseDistance: CGFloat = 72
@@ -862,12 +889,21 @@ final class DeckStageController: UIViewController, UIGestureRecognizerDelegate, 
     lifts[id] = nil
     headerTucks[id] = nil
     stage.isEmpty = order.isEmpty
-    app.closeTab(id)
     guard animated, !UIAccessibility.isReduceMotionEnabled, let card else {
+      app.closeTab(id)
       card?.removeFromSuperview()
       header?.removeFromSuperview()
       UIViewPropertyAnimator(duration: 0.5, timingParameters: Self.spring(response: Self.gapResponse)).run { self.layoutCards() }
       return
+    }
+    closing.insert(id)
+    defer {
+      CATransaction.flush()
+      DispatchQueue.main.async { [weak self] in
+        guard let self else { return }
+        self.app.closeTab(id)
+        self.closing.remove(id)
+      }
     }
     let travel = card.frame.maxY + 20
     let speed = max(-velocity, travel / Self.throwDuration)
