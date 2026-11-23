@@ -9,6 +9,11 @@ python3 harness.py list              # scenarios
 python3 harness.py ui                # what is on screen (accessibility labels and centres)
 ```
 
+`ARDIA_HARNESS_SIM` (simulator name) and `ARDIA_HARNESS_DERIVED` (derived-data path) let a second agent run on its
+own simulator and build. `run <scenario> --trace` adds a Time Profiler trace and names what filled each slow main pass.
+Scenarios added for the motion pass: `deck-close` (flick cards away), `deck-surfaces` (Archive, Incognito, the empty
+switcher, the start page, from an in-app script) and `page-swipe` (back and forward swipes on `fixtures/nav-*.html`).
+
 Each run writes `runs/<time>-<scenario>/` with `video.mp4`, `probe.jsonl`, `meta.json` and `report.json`.
 
 ## How it works
