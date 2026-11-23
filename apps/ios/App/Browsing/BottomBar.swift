@@ -33,11 +33,13 @@ struct BottomBar: View {
   private var rowBar: some View {
     ZStack {
       BarTabsStackButton(actions: actions, showsStack: showsTabStack)
+        .modifier(CarriedByPageMenu())
         .frame(maxWidth: .infinity, alignment: .leading)
       if !iconsOnly {
         BarPlusCapsule(action: actions.onPlus)
       }
       BarPageMenuButton(address: address, action: actions.onMore)
+        .modifier(CarriedByPageMenu())
         .padding(.trailing, BrowseLayout.barSide - (BrowseLayout.hitTarget - BrowseLayout.barCircle) / 2)
         .frame(maxWidth: .infinity, alignment: .trailing)
     }

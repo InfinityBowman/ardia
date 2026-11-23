@@ -8,29 +8,44 @@ struct PageMenuPanel: View {
   @Environment(\.displayScale) private var displayScale
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @State private var shownID: UUID?
+  @State private var mountedID: UUID?
   @State private var rise: CGFloat = 0
   @State private var dimmed = false
   @State private var drag: CGFloat = 0
   @State private var panelHeight: CGFloat = 560
   @State private var generation = 0
+  @State private var riders: Double = 0
+  @ScaledMetric(relativeTo: .body) private var capsuleHeight: CGFloat = PageMenuLayout.addressHeight
 
   var body: some View {
     GeometryReader { proxy in
       let safeBottom = proxy.safeAreaInsets.bottom
       let travel = PageMenuLayout.travel(panelHeight: panelHeight, safeBottom: safeBottom)
+      let isShown = shownID != nil
       ZStack(alignment: .bottom) {
-        if let shownID {
+        if let mountedID {
           Color.black
             .opacity(dimmed ? PageMenuLayout.dim : 0)
             .padding(.bottom, max(panelHeight - (1 - rise) * travel - drag - PageMenuLayout.panelRadius, 0))
             .contentShape(.rect)
             .onTapGesture { app.browse.isToolbarPresented = false }
+            .allowsHitTesting(isShown)
+            .accessibilityHidden(!isShown)
             .accessibilityLabel("Close Menu")
             .accessibilityAddTraits(.isButton)
-          panel(shownID, safeBottom: safeBottom, maxHeight: proxy.size.height - PageMenuLayout.topGap)
+          panel(mountedID, safeBottom: safeBottom, maxHeight: proxy.size.height - PageMenuLayout.topGap)
             .environment(\.colorScheme, menuScheme)
+            .environment(\.pageMenuBarScheme, colorScheme)
+            .environment(\.pageMenuShown, isShown)
+            .overlay(alignment: .top) {
+              PageMenuBarRiders(addressHeight: capsuleHeight)
+                .opacity(riders)
+            }
             .offset(y: (1 - rise) * travel + drag)
             .environment(\.pageMenuRise, rise)
+            .opacity(isShown ? 1 : 0)
+            .allowsHitTesting(isShown)
+            .accessibilityHidden(!isShown)
             .accessibilityAddTraits(.isModal)
             .accessibilityAction(.escape) { app.browse.isToolbarPresented = false }
         }
@@ -41,6 +56,7 @@ struct PageMenuPanel: View {
     .onChange(of: app.browse.isToolbarPresented, initial: true) { _, presented in
       presented ? open() : close()
     }
+    .task { await prewarm() }
   }
 
   private func panel(_ id: UUID, safeBottom: CGFloat, maxHeight: CGFloat) -> some View {
@@ -48,6 +64,7 @@ struct PageMenuPanel: View {
       .padding(.bottom, safeBottom)
       .background(alignment: .top) {
         fill
+          .modifier(PageMenuRiseOpacity(rise: rise, curve: .landing))
           .clipShape(UnevenRoundedRectangle(topLeadingRadius: PageMenuLayout.panelRadius, topTrailingRadius: PageMenuLayout.panelRadius, style: .continuous))
           .padding(.bottom, -PageMenuLayout.overhang)
           .allowsHitTesting(false)
@@ -55,7 +72,15 @@ struct PageMenuPanel: View {
       .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
       .highPriorityGesture(pull, isEnabled: panelHeight - safeBottom < maxHeight - safeBottom)
       .simultaneousGesture(pull, isEnabled: panelHeight - safeBottom >= maxHeight - safeBottom)
-      .id(generation)
+  }
+
+  private func prewarm() async {
+    try? await Task.sleep(for: PageMenuLayout.prewarmDelay)
+    guard mountedID == nil, let id = app.tabs.selectedTabID else { return }
+    HarnessProbe.mark("menu.prewarm")
+    var instant = Transaction()
+    instant.disablesAnimations = true
+    withTransaction(instant) { mountedID = id }
   }
 
   @ViewBuilder
@@ -104,17 +129,32 @@ struct PageMenuPanel: View {
       app.browse.isToolbarPresented = false
       return
     }
+    let isWarm = mountedID != nil
     var instant = Transaction()
     instant.disablesAnimations = true
     withTransaction(instant) {
-      if shownID == nil { generation += 1 }
+      if shownID == nil {
+        generation += 1
+        riders = 1
+      }
+      mountedID = id
       shownID = id
+      app.browse.pageMenuCarriesBarControls = true
       drag = 0
-      if reduceMotion { rise = 1 }
+      if reduceMotion {
+        rise = 1
+        riders = 0
+      }
     }
-    DispatchQueue.main.async {
+    let rising = {
       withAnimation(reduceMotion ? Motion.surfaceFade : PageMenuLayout.open) { rise = 1 }
+      withAnimation(PageMenuLayout.ridersLeave) { riders = 0 }
       withAnimation(Motion.trayDim) { dimmed = true }
+    }
+    if isWarm {
+      rising()
+    } else {
+      DispatchQueue.main.async(execute: rising)
     }
   }
 
@@ -122,12 +162,15 @@ struct PageMenuPanel: View {
     guard shownID != nil else { return }
     HarnessProbe.mark("menu.close")
     let closing = generation
-    withAnimation(Motion.trayDim) { dimmed = false }
+    withAnimation(PageMenuLayout.dimClear) { dimmed = false }
+    withAnimation(reduceMotion ? Motion.surfaceFade : PageMenuLayout.ridersArrive) { riders = 1 }
     withAnimation(reduceMotion ? Motion.surfaceFade : PageMenuLayout.close) {
       rise = 0
+      drag = 0
     } completion: {
       guard closing == generation, !app.browse.isToolbarPresented else { return }
       shownID = nil
+      app.browse.pageMenuCarriesBarControls = false
       drag = 0
     }
   }
@@ -135,6 +178,121 @@ struct PageMenuPanel: View {
 
 extension EnvironmentValues {
   @Entry var pageMenuRise: CGFloat = 1
+  @Entry var pageMenuBarScheme: ColorScheme?
+  @Entry var pageMenuShown = true
+}
+
+struct PageMenuShownWatcher: ViewModifier {
+  let onShow: () -> Void
+  let onHide: () -> Void
+
+  @Environment(\.pageMenuShown) private var isShown
+
+  func body(content: Content) -> some View {
+    content.onChange(of: isShown) { _, shown in
+      shown ? onShow() : onHide()
+    }
+  }
+}
+
+enum PageMenuRiseCurve {
+  case content
+  case address
+  case landing
+  case plusGlyph
+
+  func opacity(_ rise: CGFloat) -> Double {
+    switch self {
+    case .content: PageMenuLayout.contentOpacity(rise: rise)
+    case .address: PageMenuLayout.addressOpacity(rise: rise)
+    case .landing: PageMenuLayout.landingOpacity(rise: rise)
+    case .plusGlyph: min(Double(1 - rise), PageMenuLayout.landingOpacity(rise: rise))
+    }
+  }
+}
+
+struct PageMenuRiseOpacity: ViewModifier, Animatable {
+  var rise: CGFloat
+  let curve: PageMenuRiseCurve
+
+  var animatableData: CGFloat {
+    get { rise }
+    set { rise = newValue }
+  }
+
+  func body(content: Content) -> some View {
+    content.opacity(curve.opacity(rise))
+  }
+}
+
+struct PageMenuContentFade: ViewModifier {
+  @Environment(\.pageMenuRise) private var rise
+
+  func body(content: Content) -> some View {
+    content.modifier(PageMenuRiseOpacity(rise: rise, curve: .content))
+  }
+}
+
+struct PageMenuAddressFade: ViewModifier {
+  let isLarge: Bool
+
+  @Environment(\.pageMenuRise) private var rise
+
+  func body(content: Content) -> some View {
+    content.modifier(PageMenuRiseOpacity(rise: isLarge ? 1 : rise, curve: .address))
+  }
+}
+
+struct PageMenuAddressBackdrop: View {
+  @Environment(\.pageMenuRise) private var rise
+  @Environment(\.pageMenuBarScheme) private var barScheme
+  @Environment(\.colorScheme) private var colorScheme
+
+  var body: some View {
+    PageMenuAddressShape(rise: rise)
+      .fill(Palette.menuGroup)
+      .modifier(PageMenuRiseOpacity(rise: rise, curve: .landing))
+      .overlay {
+        Image(systemName: "plus")
+          .font(.system(size: BrowseLayout.barPlusGlyph, weight: .medium))
+          .foregroundStyle(BrowsePalette.barGlyph)
+          .environment(\.colorScheme, barScheme ?? colorScheme)
+          .modifier(PageMenuRiseOpacity(rise: rise, curve: .plusGlyph))
+          .accessibilityHidden(true)
+      }
+  }
+}
+
+extension BarActions {
+  static let inert = BarActions(onTabs: {}, onAddress: {}, onPlus: {}, onMore: {}, onExpand: {}, onStep: { _ in }, onSelectTab: { _ in }, onCloseTab: {})
+}
+
+struct PageMenuBarRiders: View {
+  let addressHeight: CGFloat
+
+  @Environment(AppModel.self) private var app
+
+  var body: some View {
+    ZStack {
+      BarTabsStackButton(actions: .inert)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      BarPageMenuButton(address: BarAddress(tab: app.tabs.selectedTab, page: app.currentPage), action: {})
+        .padding(.trailing, BrowseLayout.barSide - (BrowseLayout.hitTarget - BrowseLayout.barCircle) / 2)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+    .frame(height: BrowseLayout.barControl)
+    .padding(.top, PageMenuLayout.inset + addressHeight / 2 - BrowseLayout.barControl / 2)
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+  }
+}
+
+struct CarriedByPageMenu: ViewModifier {
+  @Environment(AppModel.self) private var app
+
+  func body(content: Content) -> some View {
+    content.opacity(app.browse.pageMenuCarriesBarControls ? 0 : 1)
+  }
 }
 
 nonisolated struct PageMenuAddressShape: Shape {

@@ -15,8 +15,14 @@ struct PageMenuDownloads: View {
   let onOpenList: () -> Void
 
   @Environment(AppModel.self) private var app
+  @Environment(\.pageMenuShown) private var isShown
 
   var body: some View {
+    if isShown { content }
+  }
+
+  @ViewBuilder
+  private var content: some View {
     let running = app.web.downloads.running
     let recent = Array(app.downloadActivity.recent.prefix(PageMenuDownloadsLayout.shownFinished))
     let pending = app.downloadActivity.isPending

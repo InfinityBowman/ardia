@@ -34,9 +34,25 @@ enum PageMenuLayout {
   static let flingToClose: CGFloat = 160
   static let open = Animation.spring(response: 0.22, dampingFraction: 1)
   static let close = Animation.spring(response: 0.22, dampingFraction: 1)
+  static let ridersArrive = Animation.easeOut(duration: 0.05)
+  static let ridersLeave = Animation.easeIn(duration: 0.05).delay(0.025)
+  static let dimClear = Animation.easeOut(duration: 0.08)
+  static let prewarmDelay: Duration = .seconds(1.5)
   static let expand = Animation.spring(response: 0.3, dampingFraction: 1)
   static let contentShown: CGFloat = 0.45
   static let separator: CGFloat = 1
+
+  static let landingFade: CGFloat = 0.12
+
+  static func landingOpacity(rise: CGFloat) -> Double {
+    Double(min(max(rise / landingFade, 0), 1))
+  }
+
+  static let addressShown: CGFloat = 0.3
+
+  static func addressOpacity(rise: CGFloat) -> Double {
+    Double(min(max((rise - addressShown) / (1 - addressShown), 0), 1))
+  }
 
   static func contentOpacity(rise: CGFloat) -> Double {
     Double(min(max((rise - contentShown) / (1 - contentShown), 0), 1))

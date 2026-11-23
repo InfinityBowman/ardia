@@ -20,6 +20,7 @@ final class BrowseSession {
   var search: SearchRequest?
   var trayHoldsKeyboard = false
   var isToolbarPresented = false
+  var pageMenuCarriesBarControls = false
   var readerTabID: UUID?
   var titleFeedback: String?
   var isVoicePresented = false

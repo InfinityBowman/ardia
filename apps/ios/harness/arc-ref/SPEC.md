@@ -770,7 +770,21 @@ system keyboard both apps get the system's slide.
   (was 0.12 s), and the tiles and groups fade with the rise (gone below 45 % of it, ≈ 65 ms into a close),
   while the address row shrinks into the + capsule. Tapping the address row already opened search with the
   full URL selected, as Arc does. Download Video, Block Ads and Trackers and More stay where they are, since
-  Ardia has no Summarize or Pin. Not copied: the tabs button and ^ riding on the closing panel's top row.
+  Ardia has no Summarize or Pin.
+- **The bar's controls ride the panel** (`rec4/arc-white.mp4` frames 604–630, 60 fps): on a close the tabs
+  button's thumbnails and the ^ circle appear on the address row's line within ≈ 2 frames (the first motion
+  frame is 605, both are clear by 607), at their bar x, and ride down with the panel's top row while the
+  address row shrinks into the + capsule; the ^ glyph's bottom edge goes 490.7 → 832 pt (rest) and lands
+  with the panel top on the band top (797 pt), remaining distance shrinking ×0.74–0.78 per frame late in the
+  move. Opening runs it backwards: the bar's thumbnails rise with the address row and are gone by ≈ frame 5.
+- Ardia (since this round): the menu stays built after its first use (and is built 1.5 s after launch), so
+  opening only reveals it; the tabs button and ^ of the bar are hidden while the menu holds them, and a copy
+  of both rides the panel's address-row line (shown in 0.05 s on a close, faded out 25–75 ms into an open).
+  In the last 12 % of a close the panel's material, the address capsule and its + glyph hand over to the
+  real band and + capsule beneath, so nothing changes colour when the panel goes; a swipe-down close drops
+  the panel (and the riders) into the bar on the close spring instead of sliding past it. The dim clears in
+  0.08 s on a close. The address row's contents now fade over the top 70 % of the rise (gone ≈ 65 ms into a
+  close), and the rows and tiles follow their 45 % curve frame by frame.
 
 ### 6.7 Turning back to the switcher while an older card lands (iPad `s2` r3/r5, `v-tabs-during-zoom.jpg`)
 

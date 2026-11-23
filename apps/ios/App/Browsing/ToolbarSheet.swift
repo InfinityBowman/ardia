@@ -12,7 +12,6 @@ struct ToolbarSheet: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.colorScheme) private var colorScheme
-  @Environment(\.pageMenuRise) private var rise
   @State private var copies = 0
   @State private var confirmsTranslation = false
   @State private var contentHeight: CGFloat = 560
@@ -21,6 +20,7 @@ struct ToolbarSheet: View {
   @State private var followUp: PageMenuFollowUp?
   @AppStorage("pageMenu.displayOptionsExpanded") private var showsDisplay = false
   @State private var showsMore = false
+  @State private var scrollPosition = ScrollPosition(edge: .top)
   @ScaledMetric(relativeTo: .body) private var capsuleHeight: CGFloat = PageMenuLayout.addressHeight
   @ScaledMetric(relativeTo: .body) private var tileSize: CGFloat = PageMenuLayout.tile
 
@@ -34,7 +34,7 @@ struct ToolbarSheet: View {
         VStack(spacing: PageMenuLayout.barSpacing) {
           navigationCapsule
           actionButtons
-            .opacity(PageMenuLayout.contentOpacity(rise: rise))
+            .modifier(PageMenuContentFade())
         }
         VStack(spacing: PageMenuLayout.groupSpacing) {
           PageMenuDownloads { close(then: .sheet(.downloads)) }
@@ -77,11 +77,12 @@ struct ToolbarSheet: View {
           }
         }
         .padding(.top, PageMenuLayout.groupSpacing)
-        .opacity(PageMenuLayout.contentOpacity(rise: rise))
+        .modifier(PageMenuContentFade())
       }
       .padding(PageMenuLayout.inset)
       .padding(.bottom, dynamicTypeSize.isAccessibilitySize ? Spacing.large : 0)
     }
+    .scrollPosition($scrollPosition)
     .scrollBounceBehavior(.basedOnSize)
     .scrollDisabled(panelMaxHeight.map { contentHeight <= $0 } ?? false)
     .frame(height: panelMaxHeight.map { min(contentHeight, $0) })
@@ -102,12 +103,13 @@ struct ToolbarSheet: View {
     .presentationBackground(Palette.menuSheet)
     .presentationDragIndicator(.hidden)
     .sensoryFeedback(.success, trigger: copies)
-    .onDisappear {
-      app.downloadActivity.menuClosed()
-      guard let followUp else { return }
-      self.followUp = nil
-      app.perform(followUp, on: tabID)
-    }
+    .onDisappear(perform: finishClosing)
+    .modifier(PageMenuShownWatcher {
+      showsMore = false
+      scrollPosition.scrollTo(edge: .top)
+    } onHide: {
+      finishClosing()
+    })
     .alert("Translate with Google?", isPresented: $confirmsTranslation) {
       Button("Translate") {
         if let page { app.translate(page) }
@@ -117,6 +119,13 @@ struct ToolbarSheet: View {
     } message: {
       Text("Google will see this page’s address.")
     }
+  }
+
+  private func finishClosing() {
+    app.downloadActivity.menuClosed()
+    guard let followUp else { return }
+    self.followUp = nil
+    app.perform(followUp, on: tabID)
   }
 
   private var menuDetent: PresentationDetent {
@@ -157,21 +166,12 @@ struct ToolbarSheet: View {
       }
     }
     .padding(.horizontal, Spacing.hairline)
-    .opacity(isLarge ? 1 : Double(rise))
+    .modifier(PageMenuAddressFade(isLarge: isLarge))
     .background {
       if isLarge {
         RoundedRectangle(cornerRadius: PageMenuLayout.groupRadius, style: .continuous).fill(Palette.menuGroup)
       } else {
-        PageMenuAddressShape(rise: rise).fill(Palette.menuGroup)
-      }
-    }
-    .overlay {
-      if !isLarge, rise < 1 {
-        Image(systemName: "plus")
-          .font(.system(size: BrowseLayout.barPlusGlyph, weight: .medium))
-          .foregroundStyle(BrowsePalette.barGlyph)
-          .opacity(Double(1 - rise))
-          .accessibilityHidden(true)
+        PageMenuAddressBackdrop()
       }
     }
   }
