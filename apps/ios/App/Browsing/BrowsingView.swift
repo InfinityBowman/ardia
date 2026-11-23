@@ -186,6 +186,7 @@ struct BrowsingView: View {
         topInset: screenLayout.isWide || screenLayout.fold != nil ? DuoLayout.toolbarClearance : 0,
         bottomInset: screenLayout == .phone ? BrowseLayout.barHeight(safeBottom: homeInset) : 0,
         barLink: screenLayout == .phone ? barLink : nil,
+        edgePager: screenLayout == .phone ? pager : nil,
         onTone: { id, tone in browse.setTone(tone, for: id) }
       )
       if MotionDemo.loadFreeze != nil {

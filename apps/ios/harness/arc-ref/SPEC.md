@@ -879,3 +879,37 @@ pieces measured above. Captures: `runs/downloads-ux/` (git-ignored).
 - **Completion toast**: "Downloaded" with the file name, a **Save to Photos** (video) or **Open** button
   and Share, for 5 s, on a solid toast fill. A download that finishes in the background shows its toast
   when the app comes back (within 10 minutes).
+
+### 6.10 Swiping back and forward between pages (iPad, 2026-11-22; `axe draw` strokes recorded with `axe stream-video`)
+
+Measured on Wikipedia pages (Sun with Earth behind it) in Arc Search on the iPad, finger at y 700, page
+offset tracked per frame against the resting page (±2 pt, ±1 frame).
+
+| Stroke | Page at release | Release speed | Result |
+|---|---|---|---|
+| Edge, 158 pt in 0.8 s | 142 pt (17 %) | ≈ 200 pt/s | commits |
+| Edge, 98 pt slowly | 106 pt (13 %) | ≈ 70 pt/s | commits |
+| Mid-screen (x 200), 360 pt in 0.5 s | 338 pt (41 %) | ≈ 620 pt/s | commits |
+| Edge, held still at 184 / 316 / 416 / 606 pt (22 / 39 / 51 / 74 %) | — | 0 | **cancels** every time |
+
+- **Commit is decided by the release velocity alone**: any forward motion at lift commits, even at 13 %;
+  lifting from a hold cancels even at 74 %. Distance plays no part.
+- **Tracking**: 1 : 1 after ≈ 20 pt of slop, from anywhere on the page (not only the edge).
+- **Page underneath**: the previous page, shifted left by ≈ 0.32 × the uncovered width (parallax) and dimmed
+  ≈ 11 % × (1 − progress) (luminance 0.89 at 5 %, 0.92 at 17 %, 0.97 at 66 %). The moving page has a faint
+  edge shadow. The bar doesn't move; nothing in it changes until the page has changed.
+- **Settle**: critically damped. Commit: response ≈ 0.15 s (remaining 39 % after 50 ms, 18 % after 83 ms;
+  from a 620 pt/s flick 52 % after 31 ms); the new page is live ≈ 80–100 ms after release. Cancel:
+  response ≈ 0.18 s (54 / 27 / 12 / 5 % after 38 / 72 / 108 / 147 ms, at rest by ≈ 220 ms).
+- **No history that way**: a swipe in from the screen edge turns to the neighbouring tab, as the bar swipe
+  does (from the left edge to the older tab, from the right edge to the newer one; 57 % held commits,
+  22–43 % held cancel). §2.9's "no gesture" was on a tab with no neighbour.
+- Not measured: the iPhone (the iPad uses the same gesture), forward swipes from mid-screen, and a release
+  that reverses direction.
+- Ardia (since this round): the swipe starts from anywhere at any speed (it needed 120 pt/s, so slow drags
+  never started), commits only when the finger lifts moving forward (> 40 pt/s; it used to commit past
+  75 pt whatever the speed), settles on 0.15 s (commit) and 0.18 s (cancel) critically damped springs that
+  start at the finger's speed (was one 0.22 s spring), and drops the snapshot as soon as the page it went
+  to has painted (was a fixed 0.25 s wait and 0.2 s fade, ≈ 0.73 s after a commit; now ≈ 0.34 s). A swipe
+  that starts within 24 pt of a side edge with no history that way drives the tab pager. Harness:
+  `page-swipe`.

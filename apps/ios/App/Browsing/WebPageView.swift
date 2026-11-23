@@ -12,6 +12,7 @@ struct WebPageView: UIViewRepresentable {
   var topInset: CGFloat = 0
   var bottomInset: CGFloat
   var barLink: BarScrollLink?
+  var edgePager: TabPager?
   var onTone: (UUID, PageTone) -> Void = { _, _ in }
 
   func makeUIView(context: Context) -> PageContainerView {
@@ -27,6 +28,7 @@ struct WebPageView: UIViewRepresentable {
     view.topInset = topInset
     view.bottomInset = bottomInset
     view.barLink = barLink
+    view.edgePager = edgePager
     guard let page else {
       view.show(nil, cover: nil, isLoading: false, progress: 0)
       return
@@ -59,6 +61,16 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
 
   var placeholderTab: BrowserTab?
   weak var barLink: BarScrollLink?
+  weak var edgePager: TabPager? {
+    didSet {
+      guard edgePager !== oldValue else { return }
+      for edge in edgePans {
+        if let oldValue { edge.removeTarget(oldValue, action: #selector(TabPager.panned(_:))) }
+        if let edgePager { edge.addTarget(edgePager, action: #selector(TabPager.panned(_:))) }
+      }
+    }
+  }
+  private let edgePans = [EdgeStartPanRecognizer(edge: .left), EdgeStartPanRecognizer(edge: .right)]
   private weak var linkedPan: UIPanGestureRecognizer?
   var backdrop: Color = ProfileLook.plum.surface {
     didSet { backgroundColor = UIColor(backdrop) }
@@ -85,12 +97,16 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
     var direction: SwipeNavigationDirection
     var target: UIView
     var shade: UIView
-    var isPastCommit = false
+    var destination: URL?
   }
 
-  static let commitDistance = Layout.swipeCommit
-  static let flickDistance = Layout.swipeFlickCommit
-  static let commitHysteresis: CGFloat = 12
+  static let commitVelocity: CGFloat = 40
+  static let beginRatio: CGFloat = 1.4
+  static let beginSpeed: CGFloat = 20
+  static let commitResponse: Double = 0.15
+  static let cancelResponse: Double = 0.18
+  static let landingDeadline: Duration = .seconds(1.5)
+  static let landingFade: TimeInterval = 0.12
   static let parallax = -Layout.swipeParallax
   static let reattachDeadline: Duration = .seconds(1.5)
   static let paintDeadline: Duration = .seconds(4)
@@ -101,6 +117,10 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
     swipePan.delegate = self
     swipePan.maximumNumberOfTouches = 1
     addGestureRecognizer(swipePan)
+    for edge in edgePans {
+      edge.delegate = self
+      addGestureRecognizer(edge)
+    }
     refreshControl.addTarget(self, action: #selector(refreshPulled), for: .valueChanged)
     refreshControl.tintColor = UIColor(BrowsePalette.loadingBorder)
     coverView.contentMode = .scaleAspectFill
@@ -451,9 +471,17 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   }
 
   override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+    if let edge = recognizer as? EdgeStartPanRecognizer {
+      guard edgePager != nil, swipe == nil else { return false }
+      let velocity = edge.velocity(in: self)
+      guard abs(velocity.x) > abs(velocity.y), edge.edge == .left ? velocity.x > 0 : velocity.x < 0 else { return false }
+      guard let page else { return true }
+      return edge.edge == .left ? !page.canGoBack : !page.canGoForward
+    }
     guard recognizer === swipePan, swipeMode == .anywhere, let page, let webView else { return false }
-    let velocity = swipePan.velocity(in: self)
-    guard abs(velocity.x) > abs(velocity.y) * 1.6, abs(velocity.x) > 120 else { return false }
+    let measured = swipePan.velocity(in: self)
+    let velocity = hypot(measured.x, measured.y) > 60 ? measured : swipePan.translation(in: self)
+    guard abs(velocity.x) > abs(velocity.y) * Self.beginRatio, abs(measured.x) > Self.beginSpeed || abs(velocity.x) > 4 else { return false }
     let scrollView = webView.scrollView
     let canScrollHorizontally = scrollView.contentSize.width > scrollView.bounds.width + 1
     if velocity.x > 0 {
@@ -466,12 +494,18 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
     return true
   }
 
+  func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+    recognizer is EdgeStartPanRecognizer && other !== swipePan && !(other is EdgeStartPanRecognizer) && other.view?.isDescendant(of: self) == true
+  }
+
   @objc private func handleSwipe(_ recognizer: UIPanGestureRecognizer) {
     guard let webView, let page else { return }
     let width = bounds.width
     switch recognizer.state {
     case .began:
-      let direction: SwipeNavigationDirection = recognizer.velocity(in: self).x > 0 ? .back : .forward
+      let measured = recognizer.velocity(in: self)
+      let heading = abs(measured.x) > 60 ? measured.x : recognizer.translation(in: self).x
+      let direction: SwipeNavigationDirection = heading > 0 ? .back : .forward
       let scrollPan = webView.scrollView.panGestureRecognizer
       scrollPan.isEnabled = false
       scrollPan.isEnabled = true
@@ -506,26 +540,21 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
       webView.layer.shadowOpacity = direction == .back ? 0.18 : 0
       webView.layer.shadowRadius = 12
       webView.layer.shadowPath = UIBezierPath(rect: webView.bounds).cgPath
-      swipe = SwipeState(direction: direction, target: target, shade: shade)
+      HarnessProbe.mark("swipe.begin", direction == .back ? "back" : "forward")
+      let list = webView.backForwardList
+      swipe = SwipeState(direction: direction, target: target, shade: shade, destination: (direction == .back ? list.backItem : list.forwardItem)?.url)
       swipeFeedback.prepare()
     case .changed:
-      guard var swipe else { return }
+      guard let swipe else { return }
       let raw = recognizer.translation(in: self).x
       layoutSwipe(swipe, progress: progress(for: raw, direction: swipe.direction))
-      let signed = swipe.direction == .back ? raw : -raw
-      let isPastCommit = swipe.isPastCommit ? signed > Self.commitDistance - Self.commitHysteresis : signed > Self.commitDistance
-      if isPastCommit != swipe.isPastCommit {
-        swipe.isPastCommit = isPastCommit
-        self.swipe = swipe
-      }
     case .ended, .cancelled, .failed:
       guard let swipe else { return }
       let raw = recognizer.translation(in: self).x
       let velocity = recognizer.velocity(in: self).x
-      let signed = swipe.direction == .back ? raw : -raw
       let signedVelocity = swipe.direction == .back ? velocity : -velocity
-      let commits = recognizer.state == .ended && (signed > Self.commitDistance && signedVelocity > -50 || signed > Self.flickDistance && signedVelocity > 600)
-      finishSwipe(swipe, commit: commits, velocity: abs(velocity))
+      let commits = recognizer.state == .ended && signedVelocity > Self.commitVelocity
+      finishSwipe(swipe, commit: commits, from: progress(for: raw, direction: swipe.direction), velocity: signedVelocity)
     default:
       break
     }
@@ -551,11 +580,15 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
     }
   }
 
-  private func finishSwipe(_ swipe: SwipeState, commit: Bool, velocity: CGFloat) {
+  private func finishSwipe(_ swipe: SwipeState, commit: Bool, from progress: CGFloat, velocity: CGFloat) {
+    HarnessProbe.mark(commit ? "swipe.commit" : "swipe.cancel")
     if commit { swipeFeedback.impactOccurred(intensity: 0.6) }
-    let distance = max(bounds.width, 1)
-    let initial = min(velocity / distance, 6)
-    let animator = UIViewPropertyAnimator(duration: 0.22, timingParameters: UISpringTimingParameters(dampingRatio: 1, initialVelocity: CGVector(dx: initial, dy: 0)))
+    let width = max(bounds.width, 1)
+    let remaining = max((commit ? 1 - progress : progress) * width, 1)
+    let towardTarget = commit ? velocity : -velocity
+    let stiffness = pow(2 * .pi / (commit ? Self.commitResponse : Self.cancelResponse), 2)
+    let timing = UISpringTimingParameters(mass: 1, stiffness: stiffness, damping: 2 * sqrt(stiffness), initialVelocity: CGVector(dx: min(max(towardTarget / remaining, 0), 30), dy: 0))
+    let animator = UIViewPropertyAnimator(duration: 0.5, timingParameters: timing)
     animator.addAnimations { [self] in layoutSwipe(swipe, progress: commit ? 1 : 0) }
     let origin = page
     animator.addCompletion { [weak self] _ in
@@ -573,14 +606,41 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
       swipe.target.transform = .identity
       swipe.target.layer.shadowOpacity = 0
       if swipe.direction == .back { page.goBack() } else { page.goForward() }
-      UIView.animate(withDuration: 0.2, delay: 0.25, options: [.curveEaseOut, .allowUserInteraction]) {
-        swipe.target.alpha = 0
-      } completion: { _ in
-        swipe.target.removeFromSuperview()
-      }
+      self.revealAfterSwipe(swipe)
     }
     swipeAnimator = animator
     animator.startAnimation()
+  }
+
+  private func revealAfterSwipe(_ swipe: SwipeState) {
+    let target = swipe.target
+    let fade = { [weak target] in
+      guard let target, target.superview != nil else { return }
+      HarnessProbe.mark("swipe.landed")
+      UIView.animate(withDuration: Self.landingFade, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
+        target.alpha = 0
+      } completion: { _ in
+        target.removeFromSuperview()
+      }
+    }
+    Task { @MainActor [weak self, weak target] in
+      let deadline = ContinuousClock.now + Self.landingDeadline
+      while ContinuousClock.now < deadline {
+        guard let self, let target, target.superview === self, let webView = self.webView else { return }
+        let arrived = swipe.destination == nil || webView.url == swipe.destination
+        if arrived, !webView.isLoading || webView.estimatedProgress > 0.5 {
+          let configuration = WKSnapshotConfiguration()
+          configuration.afterScreenUpdates = true
+          configuration.snapshotWidth = 8
+          webView.takeSnapshot(with: configuration) { _, _ in
+            MainActor.assumeIsolated { fade() }
+          }
+          return
+        }
+        try? await Task.sleep(for: .milliseconds(16))
+      }
+      fade()
+    }
   }
 
   private func cancelSwipe() {
@@ -592,6 +652,25 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
     webView?.transform = .identity
     webView?.layer.shadowOpacity = 0
     self.swipe = nil
+  }
+}
+
+final class EdgeStartPanRecognizer: UIPanGestureRecognizer {
+  static let zone: CGFloat = 24
+
+  let edge: UIRectEdge
+
+  init(edge: UIRectEdge) {
+    self.edge = edge
+    super.init(target: nil, action: nil)
+    maximumNumberOfTouches = 1
+  }
+
+  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+    super.touchesBegan(touches, with: event)
+    guard let view, let point = touches.first?.location(in: view) else { return }
+    let inZone = edge == .left ? point.x <= Self.zone : point.x >= view.bounds.width - Self.zone
+    if !inZone { state = .failed }
   }
 }
 

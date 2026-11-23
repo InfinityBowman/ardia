@@ -37,8 +37,6 @@ public enum Motion {
 
 public enum Layout {
   public static let swipeParallax: CGFloat = -0.33
-  public static let swipeCommit: CGFloat = 75
-  public static let swipeFlickCommit: CGFloat = 50
 }
 
 public extension View {

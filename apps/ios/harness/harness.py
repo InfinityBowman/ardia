@@ -519,6 +519,27 @@ def scenario_deck_surfaces(sim):
     return ["sleep 16"]
 
 
+def held_drag(x0, x1, y, hold):
+    steps = max(int(abs(x1 - x0) / 10), 2)
+    points = [(x0 + (x1 - x0) * k / steps, y) for k in range(steps + 1)]
+    points += [(x1, y + (0.5 if k % 2 == 0 else 0)) for k in range(hold)]
+    return " ".join(f"{a:.1f},{b:.1f}" for a, b in points)
+
+
+def scenario_page_swipe(sim):
+    """Open Swipe B from Swipe A, then flick back, flick forward, drag back 60 % and lift at rest (Arc cancels),
+    drag back 15 % slowly and lift while moving (Arc commits), then swipe in from each screen edge with no
+    history that way, which turns to the neighbouring tab as Arc's does."""
+    batch(sim, ["tap -x 200 -y 320", "sleep 2.5"])
+    flick = "--duration 0.15 --delta 8 --pre-delay 0 --post-delay 0"
+    return [f"swipe --start-x 80 --start-y 520 --end-x 330 --end-y 520 {flick}", "sleep 1.5",
+            f"swipe --start-x 330 --start-y 520 --end-x 80 --end-y 520 {flick}", "sleep 1.5",
+            f"draw {held_drag(40, 280, 520, 80)} --duration 1.6", "sleep 1.5",
+            "draw 40,520 60,520 80,520 100,520 --duration 0.9", "sleep 2.0",
+            f"swipe --start-x 1 --start-y 520 --end-x 260 --end-y 520 {flick}", "sleep 1.5",
+            f"swipe --start-x 401 --start-y 520 --end-x 140 --end-y 520 {flick}", "sleep 1.5"]
+
+
 def start_download(sim):
     more = find(sim, "Page Menu")
     if not more:
@@ -604,9 +625,11 @@ SCENARIOS = {
     "deck-turnback": scenario_deck_turnback,
     "deck-close": scenario_deck_close,
     "deck-surfaces": scenario_deck_surfaces,
+    "page-swipe": scenario_page_swipe,
 }
 LAUNCH_ARGS["deck-turnback"] = ["-ArdiaDeck", TURNBACK_SCRIPT]
 LAUNCH_ARGS["deck-surfaces"] = ["-ArdiaDeck", SURFACES_SCRIPT]
+LAUNCH_ARGS["page-swipe"] = ["-ArdiaHarnessOpen", f"{FIXTURES}nav-a.html"]
 LAUNCH_ARGS["download-ring"] = ["-ArdiaHarnessOpen", f"{MEDIA}video.html?seconds={DOWNLOAD_SECONDS}"]
 for _name in ("idle-scroll", "download-scroll", "idle-swipe", "download-swipe"):
     LAUNCH_ARGS[_name] = ["-ArdiaHarnessOpen", f"{MEDIA}video.html?seconds={BUSY_DOWNLOAD_SECONDS}"]
