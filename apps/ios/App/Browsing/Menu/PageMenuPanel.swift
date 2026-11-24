@@ -184,9 +184,12 @@ struct PageMenuPanel: View {
       drag = 0
     } completion: {
       guard closing == generation, !app.browse.isToolbarPresented else { return }
-      shownID = nil
       app.browse.pageMenuCarriesBarControls = false
       drag = 0
+      DispatchQueue.main.async {
+        guard closing == generation, !app.browse.isToolbarPresented else { return }
+        shownID = nil
+      }
     }
   }
 }
