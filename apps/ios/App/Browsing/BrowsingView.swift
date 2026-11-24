@@ -45,9 +45,9 @@ struct BrowsingView: View {
       }
     }
     .overlay(alignment: .top) {
-      if let page = currentWebPage {
-        LoadingLine(progress: MotionDemo.loadFreeze ?? page.progress, isLoading: MotionDemo.loadFreeze != nil || page.isLoading)
-          .id(page.id)
+      if screenLayout != .phone {
+        loadingLine
+          .padding(.top, -BrowseLayout.progressSlot / 2)
           .ignoresSafeArea(edges: .horizontal)
       }
     }
@@ -282,7 +282,7 @@ struct BrowsingView: View {
     .environment(\.pageTopShare, pageTopShare)
     barLink.onSwipeUp = { pager.landNow(); openSearch() }
     let app = app
-    return PageBarHost(link: barLink, pager: pager, fade: BrowseLayout.barFade, register: { app.pageBar = $0 }, content: content)
+    return PageBarHost(link: barLink, pager: pager, fade: BrowseLayout.barFade, register: { app.pageBar = $0 }, content: content, line: loadingLine)
       .frame(height: height + BrowseLayout.barFade)
       .offset(y: isRowBarShown ? 0 : height + BrowseLayout.barFade)
       .opacity(isRowBarShown ? 1 : 0)
@@ -291,6 +291,14 @@ struct BrowsingView: View {
       .frame(maxHeight: .infinity, alignment: .bottom)
       .ignoresSafeArea(.container, edges: [.bottom, .horizontal])
       .ignoresSafeArea(.keyboard)
+  }
+
+  @ViewBuilder
+  private var loadingLine: some View {
+    if let page = currentWebPage {
+      LoadingLine(progress: MotionDemo.loadFreeze ?? page.progress, isLoading: MotionDemo.loadFreeze != nil || page.isLoading)
+        .id(page.id)
+    }
   }
 
   private var barMotion: Animation {

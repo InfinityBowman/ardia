@@ -24,6 +24,8 @@ public enum BrowsePalette {
   public static let foregroundTertiary = Color.adaptive(light: .black.opacity(0.3), dark: .white.opacity(0.3))
   public static let popover = Palette.panel
   public static let loadingBorder = Palette.accent
+  public static let loadingHead = Color(hex: 0x3378D5)
+  public static let loadingTail = Color(hex: 0x9A86DD)
   public static let findError = Color(hex: 0xC93333)
   public static let fieldFill = Color.adaptive(light: .black.opacity(0.06), dark: .white.opacity(0.12))
   public static let fieldStroke = Color.adaptive(light: .black.opacity(0.06), dark: .white.opacity(0.08))
@@ -123,7 +125,9 @@ public enum BrowseLayout {
   public static func barHeight(safeBottom: CGFloat) -> CGFloat {
     barLine(safeBottom: safeBottom) + (safeBottom > 0 ? barBandAboveLine : barBandAboveLineWithoutHomeIndicator)
   }
-  public static let progressHeight: CGFloat = 2.5
+  public static let progressHeight: CGFloat = 1.5
+  public static let progressGlow: CGFloat = 1.5
+  public static let progressSlot: CGFloat = 8
   public static let toolbarTile: CGFloat = 78
 }
 

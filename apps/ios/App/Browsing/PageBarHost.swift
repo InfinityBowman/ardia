@@ -10,6 +10,10 @@ final class BarScrollLink {
   static let swipeReach: CGFloat = 60
 
   weak var bar: UIView?
+  weak var line: UIView?
+  var lineRest: CGFloat = 0 {
+    didSet { if lineRest != oldValue { apply() } }
+  }
   var isEnabled = true {
     didSet { if !isEnabled { show(animated: false) } }
   }
@@ -140,7 +144,9 @@ final class BarScrollLink {
   }
 
   private func apply() {
-    bar?.transform = CGAffineTransform(translationX: 0, y: hidden * travel + lift)
+    let drop = hidden * travel + lift
+    bar?.transform = CGAffineTransform(translationX: 0, y: drop)
+    line?.transform = CGAffineTransform(translationX: 0, y: min(drop, lineRest))
   }
 
   private static func offset(of scrollView: UIScrollView) -> CGFloat {
@@ -153,17 +159,19 @@ final class BarScrollLink {
   }
 }
 
-struct PageBarHost<Content: View>: UIViewRepresentable {
+struct PageBarHost<Content: View, Line: View>: UIViewRepresentable {
   let link: BarScrollLink
   let pager: TabPager
   let fade: CGFloat
   var register: (UIView) -> Void = { _ in }
   let content: Content
+  let line: Line
 
   func makeUIView(context: Context) -> PageBarContainer {
-    let container = PageBarContainer(rootView: AnyView(content), fade: fade)
+    let container = PageBarContainer(rootView: AnyView(content), line: AnyView(line), fade: fade)
     register(container)
     link.bar = container.hosted
+    link.line = container.lineHost.view
     container.swipe.addTarget(container, action: #selector(PageBarContainer.swiped(_:)))
     container.link = link
     let pan = TabPagerPanRecognizer()
@@ -179,12 +187,15 @@ struct PageBarHost<Content: View>: UIViewRepresentable {
   func updateUIView(_ container: PageBarContainer, context: Context) {
     container.fade = fade
     container.host.rootView = AnyView(content)
+    container.lineHost.rootView = AnyView(line)
     link.bar = container.hosted
+    link.line = container.lineHost.view
   }
 }
 
 final class PageBarContainer: UIView, UIGestureRecognizerDelegate {
   let host: UIHostingController<AnyView>
+  let lineHost: UIHostingController<AnyView>
   let swipe = BarSwipeUpRecognizer()
   weak var link: BarScrollLink?
   var fade: CGFloat {
@@ -193,13 +204,18 @@ final class PageBarContainer: UIView, UIGestureRecognizerDelegate {
 
   var hosted: UIView { host.view }
 
-  init(rootView: AnyView, fade: CGFloat) {
+  init(rootView: AnyView, line: AnyView, fade: CGFloat) {
     host = UIHostingController(rootView: rootView)
+    lineHost = UIHostingController(rootView: line)
     self.fade = fade
     super.init(frame: .zero)
     host.safeAreaRegions = []
     host.view.backgroundColor = .clear
     addSubview(host.view)
+    lineHost.safeAreaRegions = []
+    lineHost.view.backgroundColor = .clear
+    lineHost.view.isUserInteractionEnabled = false
+    addSubview(lineHost.view)
     swipe.maximumNumberOfTouches = 1
     swipe.delegate = self
     addGestureRecognizer(swipe)
@@ -211,7 +227,15 @@ final class PageBarContainer: UIView, UIGestureRecognizerDelegate {
     super.layoutSubviews()
     host.view.bounds = CGRect(origin: .zero, size: bounds.size)
     host.view.center = CGPoint(x: bounds.midX, y: bounds.midY)
+    lineHost.view.bounds = CGRect(x: 0, y: 0, width: bounds.width, height: BrowseLayout.progressSlot)
+    lineHost.view.center = CGPoint(x: bounds.midX, y: fade)
     link?.travel = bounds.height
+    link?.lineRest = max(bounds.height - fade - max(safeAreaInsets.bottom, BrowseLayout.progressSlot / 2), 0)
+  }
+
+  override func safeAreaInsetsDidChange() {
+    super.safeAreaInsetsDidChange()
+    setNeedsLayout()
   }
 
   override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {

@@ -9,25 +9,33 @@ struct LoadingLine: View {
   @State private var revealTask: Task<Void, Never>?
 
   var body: some View {
-    Rectangle()
-      .fill(BrowsePalette.loadingBorder)
-      .scaleEffect(x: track.fraction, y: 1, anchor: .leading)
-      .opacity(track.isVisible ? 1 : 0)
-      .frame(maxWidth: .infinity)
-      .frame(height: BrowseLayout.progressHeight)
-      .allowsHitTesting(false)
-      .accessibilityHidden(true)
-      .onChange(of: isLoading, initial: true) { _, loading in
-        if loading { begin() } else { end() }
+    ZStack {
+      stroke(height: BrowseLayout.progressHeight + 2 * BrowseLayout.progressGlow)
+        .opacity(0.3)
+      stroke(height: BrowseLayout.progressHeight)
+    }
+    .scaleEffect(x: track.fraction, y: 1, anchor: .leading)
+    .opacity(track.isVisible ? 1 : 0)
+    .frame(maxWidth: .infinity)
+    .frame(height: BrowseLayout.progressSlot)
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+    .onChange(of: isLoading, initial: true) { _, loading in
+      if loading { begin() } else { end() }
+    }
+    .onChange(of: progress) { _, value in
+      guard track.phase == .showing else {
+        track.advance(to: value)
+        return
       }
-      .onChange(of: progress) { _, value in
-        guard track.phase == .showing else {
-          track.advance(to: value)
-          return
-        }
-        withAnimation(Motion.progressAdvance) { track.advance(to: value) }
-      }
-      .onDisappear { revealTask?.cancel() }
+      withAnimation(Motion.progressAdvance) { track.advance(to: value) }
+    }
+    .onDisappear { revealTask?.cancel() }
+  }
+
+  private func stroke(height: CGFloat) -> some View {
+    LinearGradient(colors: [BrowsePalette.loadingTail, BrowsePalette.loadingHead], startPoint: .leading, endPoint: .trailing)
+      .frame(height: height)
   }
 
   private func begin() {

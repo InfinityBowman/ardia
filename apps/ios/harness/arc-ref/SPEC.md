@@ -979,3 +979,25 @@ offset tracked per frame against the resting page (±2 pt, ±1 frame).
   to has painted (was a fixed 0.25 s wait and 0.2 s fade, ≈ 0.73 s after a commit; now ≈ 0.34 s). A swipe
   that starts within 24 pt of a side edge with no history that way drives the tab pager. Harness:
   `page-swipe`.
+
+### 6.11 Page-load progress line (iPad, Arc Search 1.49.0, 60 fps `axe stream-video`, Wikipedia link taps)
+
+- **Where:** on the bottom bar's **top edge**, not at the top of the screen and not inside the bar. Its
+  centre sits 1–2 pt above where the bar's band begins (window y ≈ 1103.5 with the bar shown), over the
+  page, so the band's top edge reads as the line.
+- **Size and colour:** about 1.5 pt of solid stroke with a soft glow ≈ 1.5 pt each side. It's a
+  horizontal gradient: violet at the leading end (≈ `#9A86DD`) to blue at the head (≈ `#3378D5`).
+  It is not the bar glyph colour or the page tone.
+- **Fill:** it grows from the leading edge with the page's progress (25 %, 48 %, 88 % of the width
+  in successive quarter-second samples on one load), fills to the full width on finish, then fades out
+  in place; the fading line reads as a lighter violet. The stream's frame timing on the device isn't
+  even, so these steps are not exact timings.
+- **Bar hidden on scroll:** the line rides with the bar's top edge while the bar slides down (the bar
+  moves with the scroll, §2.8). Once the bar is fully hidden the line stays on screen, parked ≈ 20 pt
+  above the window's bottom edge. When the bar comes back the line rides up with it.
+- Ardia (iPhone): the line is now a separate layer inside the page bar's host. Its transform follows
+  the bar's scroll-hide translation, clamped so it parks just above the home indicator once the bar is
+  gone. It is 1.5 pt with a 30 % 4.5 pt band behind it for the glow, a `#9A86DD` → `#3378D5` gradient,
+  and the same reveal, advance, fill and fade as before. The page menu panel and the search tray cover
+  it while they're up. The iPad column and wide layouts keep the line at the top of the page, since
+  their bar isn't at the bottom.
