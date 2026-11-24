@@ -613,6 +613,15 @@ def scenario_page_swipe(sim):
             f"swipe --start-x 401 --start-y 520 --end-x 140 --end-y 520 {flick}", "sleep 1.5"]
 
 
+def scenario_page_swipe_script(sim):
+    """Open Script B from Script A with pushState, then flick back and forward: both swipes must slide a picture
+    of the page they land on, never a blank one."""
+    batch(sim, ["tap -x 200 -y 320", "sleep 2.5"])
+    flick = "--duration 0.15 --delta 8 --pre-delay 0 --post-delay 0"
+    return [f"swipe --start-x 80 --start-y 520 --end-x 330 --end-y 520 {flick}", "sleep 1.5",
+            f"swipe --start-x 330 --start-y 520 --end-x 80 --end-y 520 {flick}", "sleep 1.5"]
+
+
 def start_download(sim):
     more = find(sim, "Page Menu")
     if not more:
@@ -699,6 +708,7 @@ SCENARIOS = {
     "deck-close": scenario_deck_close,
     "deck-surfaces": scenario_deck_surfaces,
     "page-swipe": scenario_page_swipe,
+    "page-swipe-script": scenario_page_swipe_script,
     "display-options": scenario_display_options,
     "more-options": scenario_more_options,
     "typed-url": scenario_typed_url,
@@ -706,6 +716,7 @@ SCENARIOS = {
 LAUNCH_ARGS["deck-turnback"] = ["-ArdiaDeck", TURNBACK_SCRIPT]
 LAUNCH_ARGS["deck-surfaces"] = ["-ArdiaDeck", SURFACES_SCRIPT]
 LAUNCH_ARGS["page-swipe"] = ["-ArdiaHarnessOpen", f"{FIXTURES}nav-a.html"]
+LAUNCH_ARGS["page-swipe-script"] = ["-ArdiaHarnessOpen", f"{FIXTURES}spa-a.html"]
 LAUNCH_ARGS["download-ring"] = ["-ArdiaHarnessOpen", f"{MEDIA}video.html?seconds={DOWNLOAD_SECONDS}"]
 for _name in ("idle-scroll", "download-scroll", "idle-swipe", "download-swipe"):
     LAUNCH_ARGS[_name] = ["-ArdiaHarnessOpen", f"{MEDIA}video.html?seconds={BUSY_DOWNLOAD_SECONDS}"]

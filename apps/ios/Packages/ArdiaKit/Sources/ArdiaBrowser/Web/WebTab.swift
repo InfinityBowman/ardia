@@ -60,8 +60,7 @@ public final class WebTab: DiscardablePage, Identifiable {
   @ObservationIgnored private var crashReloads = 0
   @ObservationIgnored private var snapshotTask: Task<Void, Never>?
   @ObservationIgnored private var pendingURL: URL?
-  @ObservationIgnored private var swipeSnapshots: [ObjectIdentifier: UIImage] = [:]
-  @ObservationIgnored private var swipeSnapshotOrder: [ObjectIdentifier] = []
+  @ObservationIgnored private var swipeSnapshots: [(item: WKBackForwardListItem, image: UIImage)] = []
   @ObservationIgnored public private(set) var committedNavigations = 0
   @ObservationIgnored public private(set) var isProvisional = false
   @ObservationIgnored var videoFrames: [WKFrameInfo] = []
@@ -89,7 +88,8 @@ public final class WebTab: DiscardablePage, Identifiable {
   public func snapshotForSwipe(_ direction: SwipeNavigationDirection) -> UIImage? {
     guard let list = webView?.backForwardList else { return nil }
     let item = direction == .back ? list.backItem : list.forwardItem
-    return item.flatMap { swipeSnapshots[ObjectIdentifier($0)] }
+    guard let item else { return nil }
+    return swipeSnapshots.last { $0.item === item }?.image
   }
 
   public var blockersEnabled: Bool {
@@ -115,29 +115,29 @@ public final class WebTab: DiscardablePage, Identifiable {
     webView?.allowsBackForwardNavigationGestures = mode == .screenEdges
   }
 
-  private func rememberSwipeSnapshot() {
+  public func rememberSwipeSnapshot() {
     guard let webView, webView.window != nil, let item = webView.backForwardList.currentItem else { return }
-    let key = ObjectIdentifier(item)
     let configuration = WKSnapshotConfiguration()
     configuration.afterScreenUpdates = false
     webView.takeSnapshot(with: configuration) { [weak self] image, _ in
       MainActor.assumeIsolated {
         guard let self, let image else { return }
-        self.swipeSnapshots[key] = image
-        self.swipeSnapshotOrder.removeAll { $0 == key }
-        self.swipeSnapshotOrder.append(key)
-        while self.swipeSnapshotOrder.count > 8 { self.swipeSnapshots[self.swipeSnapshotOrder.removeFirst()] = nil }
+        self.swipeSnapshots.removeAll { $0.item === item }
+        self.swipeSnapshots.append((item, image))
+        if self.swipeSnapshots.count > 8 { self.swipeSnapshots.removeFirst(self.swipeSnapshots.count - 8) }
       }
     }
   }
 
   public func goBack() {
     failure = nil
+    rememberSwipeSnapshot()
     webView?.goBack()
   }
 
   public func goForward() {
     failure = nil
+    rememberSwipeSnapshot()
     webView?.goForward()
   }
 
@@ -245,7 +245,7 @@ public final class WebTab: DiscardablePage, Identifiable {
     isFindingInPage = false
     snapshotTask?.cancel()
     snapshotTask = nil
-    swipeSnapshots = [:]
+    swipeSnapshots = []
     observations.forEach { $0.invalidate() }
     observations = []
     webView.stopLoading()
@@ -377,7 +377,7 @@ public final class WebTab: DiscardablePage, Identifiable {
     if isMainFrame, action.targetFrame != nil {
       videoFrames = []
       pendingNavigationType = action.navigationType
-      if action.navigationType != .reload { rememberSwipeSnapshot() }
+      if action.navigationType != .reload, action.navigationType != .backForward { rememberSwipeSnapshot() }
       let targetHost = BrowserURL.host(of: target.absoluteString)
       if let controller = webView?.configuration.userContentController {
         engine?.blocker.prepareNavigation(of: controller, toHost: targetHost, isPrivate: isPrivate)

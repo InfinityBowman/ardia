@@ -1084,3 +1084,29 @@ history entry). Arc's visually complete times (frame ≥ 95 % like the settled p
 - The 0.43 s black gap does not reproduce on the simulator (0–4 black frames). `reload()` there doesn't
   revalidate cached subresources: a test server saw only the HTML re-requested. A same-device trace on a
   phone is still needed to place it.
+
+### 6.14 Link tap, then swiping back and forward (owner's iPhone, 2026-11-24, 60 fps, Ardia then Arc on the same phone)
+
+The site changes pages with `history.pushState`, not a new load. All back and forward moves were edge swipes.
+Times run from the first frame that moves.
+
+| | Ardia (before) | Arc Search |
+|---|---|---|
+| Link tap | new page in one frame, no blank | new page in one frame, no blank |
+| Back swipe | the page slides off over **black** in 0.13 s, stays black 0.20 s, then fades in over 0.10 s; still at 0.45 s | a picture of the previous page slides in; still at 0.25–0.28 s |
+| Forward swipe | the page slides off onto **black** in 0.13 s, stays black 0.27 s, fades in 0.08 s; still at 0.48 s | a picture of the next page slides in; still at 0.32 s |
+| Black frames per swipe | 12–16 (0.20–0.27 s) | 0 |
+
+- Cause: the picture under a swiping page was only taken in `decidePolicyFor navigationAction`, which never
+  runs for a same-document (pushState or popstate) move. So no page reached by a script link had one. For a
+  back or forward load, WebKit has already made the destination the current history item by then. The
+  page being left was therefore filed under the destination, so forward swipes never had a picture and a
+  later back swipe could show the wrong page. The fallback is a plain view in the page's under-page
+  colour, which is black on dark sites.
+- Ardia now takes the picture when a finger lifts from a tap on the page (before the page acts on it) and
+  just before every back or forward. It files each picture under its history item, compared by identity. On
+  the simulator, back and forward swipes slide the right page both on script links (`page-swipe-script`,
+  `fixtures/spa-a.html`) and on real loads (`page-swipe`), 7 of 7 hits; before, 0 of 2 and 3 of 4.
+- The swipe still lifts its picture once the web view reports the destination and a presentation update
+  has gone through. A page that redraws later than that on popstate shows its old content under the last
+  ≈ 0.1 s of the fade.

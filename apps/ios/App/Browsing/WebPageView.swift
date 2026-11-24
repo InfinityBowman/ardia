@@ -90,6 +90,7 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   private var lastScroll: TimeInterval = 0
   private var wasLoading = false
   private lazy var swipePan = UIPanGestureRecognizer(target: self, action: #selector(handleSwipe(_:)))
+  private let tapWatcher = TapEndWatcher()
   private var swipe: SwipeState?
   private var swipeAnimator: UIViewPropertyAnimator?
   private lazy var refreshFeedback = UIImpactFeedbackGenerator(style: .light, view: self)
@@ -119,6 +120,8 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
     swipePan.delegate = self
     swipePan.maximumNumberOfTouches = 1
     addGestureRecognizer(swipePan)
+    tapWatcher.onTap = { [weak self] in self?.page?.rememberSwipeSnapshot() }
+    addGestureRecognizer(tapWatcher)
     for edge in edgePans {
       edge.delegate = self
       addGestureRecognizer(edge)
@@ -528,7 +531,7 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   }
 
   func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
-    recognizer is EdgeStartPanRecognizer && other !== swipePan && !(other is EdgeStartPanRecognizer) && other.view?.isDescendant(of: self) == true
+    recognizer is EdgeStartPanRecognizer && other !== swipePan && other !== tapWatcher && !(other is EdgeStartPanRecognizer) && other.view?.isDescendant(of: self) == true
   }
 
   @objc private func handleSwipe(_ recognizer: UIPanGestureRecognizer) {
@@ -543,7 +546,9 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
       scrollPan.isEnabled = false
       scrollPan.isEnabled = true
       let target: UIView
-      if let image = page.snapshotForSwipe(direction) {
+      let snapshot = page.snapshotForSwipe(direction)
+      HarnessProbe.mark("swipe.snapshot", snapshot == nil ? "miss" : "hit")
+      if let image = snapshot {
         let imageView = UIImageView(image: image)
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true
@@ -686,6 +691,51 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
     webView?.layer.shadowOpacity = 0
     self.swipe = nil
   }
+}
+
+final class TapEndWatcher: UIGestureRecognizer {
+  static let slop: CGFloat = 12
+  static let longest: TimeInterval = 0.8
+
+  var onTap: (() -> Void)?
+  private var start: CGPoint?
+  private var startTime: TimeInterval = 0
+
+  init() {
+    super.init(target: nil, action: nil)
+    cancelsTouchesInView = false
+    delaysTouchesBegan = false
+    delaysTouchesEnded = false
+  }
+
+  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+    guard start == nil, event.allTouches?.count == 1, let touch = touches.first else {
+      state = .failed
+      return
+    }
+    start = touch.location(in: view)
+    startTime = touch.timestamp
+  }
+
+  override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+    guard let start, let point = touches.first?.location(in: view) else { return }
+    if hypot(point.x - start.x, point.y - start.y) > Self.slop { state = .failed }
+  }
+
+  override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+    if start != nil, let touch = touches.first, touch.timestamp - startTime < Self.longest { onTap?() }
+    state = .failed
+  }
+
+  override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+    state = .failed
+  }
+
+  override func reset() {
+    start = nil
+  }
+
+  override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
 }
 
 final class EdgeStartPanRecognizer: UIPanGestureRecognizer {

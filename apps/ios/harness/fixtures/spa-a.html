@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Swipe Script A</title>
+<style>body{margin:0;font:17px/1.5 -apple-system,system-ui;color:#eee;background:#0b0b0c}
+header{padding:64px 20px 28px}h1{margin:0;font-size:34px}
+a.go{display:block;margin:20px;height:160px;border-radius:16px;background:#d9472b;color:#fff;font-size:28px;font-weight:700;text-decoration:none;padding:20px;box-sizing:border-box}
+main{padding:8px 20px 120px}.b h1{color:#4fd17a}</style>
+</head><body><div id="root"></div>
+<script>
+const pages = {
+  a: '<header><h1>Script A</h1><div>Same-document page for swipes</div></header><a class="go" href="?b">Open Script B</a><main><p>Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p><p>Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p></main>',
+  b: '<div class="b"><header><h1>Script B</h1><div>Drawn by script after pushState</div></header><main><p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p><p>Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est laborum.</p><p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.</p></main></div>'
+};
+const root = document.getElementById('root');
+function draw() { root.innerHTML = pages[location.search === '?b' ? 'b' : 'a']; }
+document.addEventListener('click', e => {
+  const link = e.target.closest('a.go');
+  if (!link) return;
+  e.preventDefault();
+  history.pushState(null, '', link.getAttribute('href'));
+  draw();
+});
+addEventListener('popstate', () => setTimeout(draw, 60));
+draw();
+</script></body></html>
