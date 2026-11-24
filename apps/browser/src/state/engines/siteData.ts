@@ -11,7 +11,7 @@ import { noteSiteDataGate } from "../telemetry/siteDataCounts";
 import { consentToken } from "../telemetry/client";
 import { nativeConsent } from "../telemetry/nativeConsent";
 
-export { carriesSiteData, carryForTab, carryRecentSites, carrySite, type CarryOptions } from "./siteDataCarry";
+export { carriesSiteData, carryForTab, carryRecentSites, carrySite } from "./siteDataCarry";
 export { clearSiteDataEverywhere, forgetSiteDataProfile, whileClearingSiteData } from "./siteDataState";
 
 const GATE_DEADLINE_MS = 450;
@@ -38,6 +38,8 @@ export function noteWebKitPageSettled(tabId: string, url: string, loading: boole
 const tabSites = new Map<string, { site: string; at: number }[]>();
 const tabUrls = new Map<string, string>();
 let scanTimer: ReturnType<typeof setTimeout> | null = null;
+
+const scanSiteData = () => void scan();
 
 async function scan() {
   const consent = consentToken();
@@ -107,13 +109,13 @@ export function startSiteData() {
   });
   let watching = carriesSiteData();
   void watchWebKitSiteData(watching).catch(() => {});
-  useBrowser.subscribe((s, prev) => {
+  useBrowser.subscribeTo(["settings", "tabs"], (s, prev) => {
     if (s.settings !== prev.settings && carriesSiteData(s) !== watching) {
       watching = carriesSiteData(s);
       void watchWebKitSiteData(watching).catch(() => {});
     }
     if (s.tabs === prev.tabs || scanTimer) return;
-    scanTimer = setTimeout(() => void scan(), SCAN_DELAY_MS);
+    scanTimer = setTimeout(scanSiteData, SCAN_DELAY_MS);
   });
 }
 

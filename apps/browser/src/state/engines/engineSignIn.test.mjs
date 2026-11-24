@@ -159,6 +159,138 @@ test("private windows, a tab that changed profile mid-read, and the carry settin
   assert.deepEqual(webKit.writes, []);
 });
 
+const OK = "https://ok.app.test";
+const BLOCKED = "https://blk.app.test";
+const cookieOn = (name, domain) => ({ name, value: name, domain, path: "/", expires: -1, session: true, httpOnly: false, secure: true });
+const siblingJar = () => [cookieOn("okc", "ok.app.test"), cookieOn("blkc", "blk.app.test"), cookieOn("blksub", ".blk.app.test"), cookieOn("deep", "x.blk.app.test"), cookieOn("wide", ".app.test")];
+const names = (cookies) => cookies.map((c) => c.name).sort();
+const blockSibling = () => stub.siteSettingsDb.set(`\n${BLOCKED}`, { cookies: "block" });
+
+const twoLabelSites = { registrableDomains: ({ hosts }) => ({ domains: hosts.map((h) => h.split(".").slice(-2).join(".")) }) };
+
+test("the background carry leaves a blocked host's cookies behind and still carries its allowed sibling's", async () => {
+  await withSites(twoLabelSites, async () => {
+    const { tabId } = setup();
+    blockSibling();
+    try {
+      const { learnRegistrableDomains } = await import("./siteDataDomains.ts");
+      const { touch } = await import("./siteDataLedger.ts");
+      const { book } = await import("./siteDataState.ts");
+      await learnRegistrableDomains(["ok.app.test", "blk.app.test"]);
+      S().updateTab(tabId, { url: `${OK}/home` });
+      webviews.set(tabId, chromiumPage({ cookies: siblingJar(), storage: {} }));
+      touch(book(), "", "app.test", "chromium", Date.now(), OK);
+      touch(book(), "", "app.test", "chromium", Date.now(), BLOCKED);
+      await carrySite("", "app.test", "webkit", { consent: null });
+      assert.deepEqual(names(webKit.cookies), ["okc"], "a background carry with no origin carries the allowed host's cookie and leaves the blocked host's, its subdomain's and the domain cookie it can see behind");
+      webKit.cookies = [];
+      await carrySite("", "app.test", "webkit", { origin: BLOCKED, consent: null });
+      assert.deepEqual(webKit.cookies, [], "a carry for the blocked origin itself moves nothing");
+    } finally {
+      stub.siteSettingsDb.delete(`\n${BLOCKED}`);
+    }
+  });
+});
+
+test("a cookie block set after a carry applies to the next carry at once, not after the block cache expires", async () => {
+  const { setSiteSetting } = await import("../../platform/siteSettings.ts");
+  await withSites(twoLabelSites, async () => {
+    try {
+      const { tabId } = setup();
+      S().updateTab(tabId, { url: `${OK}/home` });
+      const page = chromiumPage({ cookies: [cookieOn("okc", "ok.app.test"), cookieOn("blkc", "blk.app.test")], storage: {} });
+      webviews.set(tabId, page);
+      await carrySignIn(tabId, `${OK}/home`, "webkit", null);
+      assert.deepEqual(names(webKit.cookies), ["blkc", "okc"]);
+      await setSiteSetting("", BLOCKED, "cookies", "block");
+      page.jar.cookies = [cookieOn("okc", "ok.app.test"), { ...cookieOn("blkc", "blk.app.test"), value: "changed" }];
+      await carrySignIn(tabId, `${OK}/home`, "webkit", null);
+      assert.equal(webKit.cookies.find((c) => c.name === "blkc").value, "blkc", "the newly blocked host's changed cookie stays in Chromium");
+    } finally {
+      stub.siteSettingsDb.delete(`\n${BLOCKED}`);
+    }
+  });
+});
+
+test("a cookie held back by a block keeps what the carry knew about it, so lifting the block brings back nothing Chromium deleted", async () => {
+  const { setSiteSetting } = await import("../../platform/siteSettings.ts");
+  await withSites(twoLabelSites, async () => {
+    try {
+      const { tabId } = setup();
+      S().updateTab(tabId, { url: `${OK}/home` });
+      const page = chromiumPage({ cookies: [cookieOn("okc", "ok.app.test"), cookieOn("sid", "blk.app.test")], storage: {} });
+      webviews.set(tabId, page);
+      await carrySignIn(tabId, `${OK}/home`, "webkit", null);
+      assert.deepEqual(names(webKit.cookies), ["okc", "sid"]);
+      await setSiteSetting("", BLOCKED, "cookies", "block");
+      page.jar.cookies = page.jar.cookies.filter((c) => c.name !== "sid");
+      await carrySignIn(tabId, `${OK}/home`, "webkit", null);
+      assert.deepEqual(names(webKit.cookies), ["okc", "sid"], "the blocked host's cookie is left alone in WebKit");
+      await setSiteSetting("", BLOCKED, "cookies", "default");
+      await carrySignIn(tabId, `${OK}/home`, "chromium", null);
+      assert.deepEqual(names(page.jar.cookies), ["okc"], "WebKit's unchanged copy of the cookie Chromium deleted doesn't come back");
+    } finally {
+      stub.siteSettingsDb.delete(`\n${BLOCKED}`);
+    }
+  });
+});
+
+test("a block set while a carry is still reading stops its write", async () => {
+  const { setSiteSetting } = await import("../../platform/siteSettings.ts");
+  await withSites(twoLabelSites, async () => {
+    try {
+      const { tabId } = setup();
+      S().updateTab(tabId, { url: `${OK}/home` });
+      webviews.set(tabId, chromiumPage({ cookies: [], storage: { [OK]: [["token", "t1"]] } }, 80));
+      const carried = carrySignIn(tabId, `${OK}/home`, "webkit", null);
+      setTimeout(() => void setSiteSetting("", BLOCKED, "cookies", "block"), 40);
+      setTimeout(() => void setSiteSetting("", OK, "cookies", "block"), 250);
+      await carried;
+      assert.equal(webKit.storage[OK], undefined, "saved data approved before the block stays in Chromium when the block lands during the carry's read");
+    } finally {
+      stub.siteSettingsDb.delete(`\n${BLOCKED}`);
+      stub.siteSettingsDb.delete(`\n${OK}`);
+    }
+  });
+});
+
+test("a carry moves nothing when the cookie block can't be read", async () => {
+  await withSites({ ...twoLabelSites, settings: () => Promise.reject(new Error("down")) }, async () => {
+    const { tabId } = setup();
+    S().updateTab(tabId, { url: `${OK}/home` });
+    webviews.set(tabId, chromiumPage({ cookies: [cookieOn("okc", "ok.app.test")], storage: {} }));
+    await carrySignIn(tabId, `${OK}/home`, "webkit", null);
+    assert.deepEqual(webKit.cookies, [], "nothing crosses while site settings are unavailable");
+  });
+});
+
+test("a switch carry leaves a blocked sibling's cookies behind in both directions", async () => {
+  await withSites(twoLabelSites, async () => {
+    try {
+      {
+        const { tabId } = setup();
+        blockSibling();
+        S().updateTab(tabId, { url: `${OK}/home` });
+        webviews.set(tabId, chromiumPage({ cookies: siblingJar(), storage: {} }));
+        await carrySignIn(tabId, `${OK}/home`, "webkit", null);
+        assert.deepEqual(names(webKit.cookies), ["okc"], "Chromium to WebKit carries only the allowed host's cookie");
+      }
+      {
+        const { tabId } = setup();
+        blockSibling();
+        S().updateTab(tabId, { url: `${OK}/home` });
+        const page = chromiumPage({ cookies: [], storage: {} });
+        webviews.set(tabId, page);
+        webKit.cookies = siblingJar();
+        await carrySignIn(tabId, `${OK}/home`, "chromium", null);
+        assert.deepEqual(names(page.jar.cookies), ["okc"], "WebKit to Chromium carries only the allowed host's cookie");
+      }
+    } finally {
+      stub.siteSettingsDb.delete(`\n${BLOCKED}`);
+    }
+  });
+});
+
 test("a fresh WebKit load holds until the Chromium sign-in has landed, then lets the page go", async () => {
   const { tabId } = setup();
   webviews.set(tabId, chromiumPage({ cookies: [signedIn], storage: {} }));
@@ -508,4 +640,169 @@ test("a WebKit load behind ten queued background carries still gets its sign-in 
   for (let i = 0; i < 200 && !webKit.released.includes("late"); i++) await new Promise((resolve) => setTimeout(resolve, 5));
   assert.ok(webKit.releasedWith[webKit.released.indexOf("late")]?.includes(".late.test"));
   await pushes;
+});
+
+const jarReads = (page) => page.reads.filter((r) => r.domains.length).length;
+function countingPage(jar) {
+  const page = chromiumPage(jar);
+  const read = page.siteData;
+  page.reads = [];
+  page.siteData = (request) => (request.op === "read" && page.reads.push(request), read(request));
+  return page;
+}
+
+test("carries of ten sites that start together read Chromium's cookie jar once, and each takes only its own site's cookies", async () => {
+  const sites = Array.from({ length: 10 }, (_, i) => `batch${i}.test`);
+  const { tabId } = setup();
+  const page = countingPage({ cookies: [...sites.map(signedInOn), signedInOn("bank.test")], storage: {} });
+  webviews.set(tabId, page);
+  const carried = await Promise.all(sites.map((site) => carrySite("", site, "webkit", { origin: `https://${site}`, consent: null })));
+  assert.deepEqual(carried.map((c) => c.cookies), sites.map(() => 1));
+  assert.ok(jarReads(page) <= 2, `ten carries read the jar ${jarReads(page)} times`);
+  assert.deepEqual(webKit.cookies.map((c) => c.domain).sort(), sites.map((s) => `.${s}`).sort());
+});
+
+test("the hourly counts say how many carries asked for Chromium's cookies and how many jar reads that took; a carry asking for none isn't counted", async () => {
+  const { setSharing } = await import("../telemetry/client.ts");
+  const { takeSiteDataCounts } = await import("../telemetry/siteDataCounts.ts");
+  const { readChromium } = await import("./siteDataChromium.ts");
+  const sites = ["count0.test", "count1.test", "count2.test"];
+  const { tabId } = setup();
+  const page = countingPage({ cookies: sites.map(signedInOn), storage: {} });
+  webviews.set(tabId, page);
+  await setSharing(true, "settings");
+  try {
+    takeSiteDataCounts();
+    const { consentToken } = await import("../telemetry/client.ts");
+    await Promise.all([...sites.map((site) => readChromium("", [site], [], false, consentToken())), readChromium("", [], [], false, consentToken())]);
+    const counts = takeSiteDataCounts();
+    assert.equal(counts.site_data_chromium_reads, 3);
+    assert.equal(counts.site_data_cookie_jar_reads, 1);
+    assert.equal(jarReads(page), 1);
+  } finally {
+    await setSharing(false, "settings");
+  }
+});
+
+test("a carry that starts while a jar read is under way waits for a read of its own, never an older one", async () => {
+  const { tabId } = setup();
+  const page = countingPage({ cookies: [signedInOn("first.test"), signedInOn("second.test")], storage: {} });
+  webviews.set(tabId, page);
+  const answer = page.holdReads();
+  const first = carrySite("", "first.test", "webkit", { origin: "https://first.test", consent: null });
+  for (let i = 0; i < 100 && !page.reads.some((r) => r.domains.includes("first.test")); i++) await new Promise((resolve) => setTimeout(resolve, 5));
+  page.jar.cookies = [...page.jar.cookies, { ...signedInOn("second.test"), name: "later" }];
+  const second = carrySite("", "second.test", "webkit", { origin: "https://second.test", consent: null });
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  answer();
+  await Promise.all([first, second]);
+  assert.ok(page.reads.some((r) => r.domains.includes("second.test") && !r.domains.includes("first.test")), "the second carry read the jar again");
+  assert.ok(webKit.cookies.some((c) => c.name === "later"), "it saw the cookie set after the first read began");
+});
+
+test("a carry queued while sharing was off isn't counted when an urgent one sends the batch after opt-in", async () => {
+  const { setSharing } = await import("../telemetry/client.ts");
+  const { takeSiteDataCounts } = await import("../telemetry/siteDataCounts.ts");
+  const { readChromium } = await import("./siteDataChromium.ts");
+  const { tabId } = setup();
+  const page = countingPage({ cookies: [signedInOn("before.test"), signedInOn("after.test")], storage: {} });
+  webviews.set(tabId, page);
+  await setSharing(false, "settings");
+  const { consentToken } = await import("../telemetry/client.ts");
+  const queued = readChromium("", ["before.test"], [], false, consentToken());
+  await setSharing(true, "settings");
+  try {
+    takeSiteDataCounts();
+    await Promise.all([queued, readChromium("", ["after.test"], [], true, consentToken())]);
+    assert.equal(jarReads(page), 1, "one batch");
+    assert.equal(takeSiteDataCounts().site_data_chromium_reads, 1, "only the request made after opt-in");
+  } finally {
+    await setSharing(false, "settings");
+  }
+});
+
+test("a carry is a main-thread job while it writes, not while it waits for its batch", async () => {
+  const jobs = await import("../app/jobActivity.ts");
+  jobs.forgetActivitiesForTests();
+  const { tabId } = setup();
+  const spanPage = countingPage({ cookies: [signedInOn("span.test")], storage: {} });
+  webviews.set(tabId, spanPage);
+  webKit.writeHold = new Promise((resolve) => setTimeout(resolve, 30));
+  const began = Date.now();
+  const carry = carrySite("", "span.test", "webkit", { origin: "https://span.test", consent: null });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(jobs.activityDuring(began, Date.now(), Date.now(), jobs.holdsMainThread), "none", "waiting for the batch holds nothing");
+  await carry;
+  assert.equal(jobs.activityDuring(began, Date.now(), Date.now(), jobs.holdsMainThread), "siteDataCarry", "the write into WebKit counts");
+});
+
+test("a page that answers nothing isn't counted as a cookie-jar read; the one that answers is", async () => {
+  const { setSharing } = await import("../telemetry/client.ts");
+  const { takeSiteDataCounts } = await import("../telemetry/siteDataCounts.ts");
+  const { readChromium } = await import("./siteDataChromium.ts");
+  const { tabId } = setup();
+  const cold = countingPage({ cookies: [], storage: {} });
+  cold.siteData = async (request) => (cold.reads.push(request), null);
+  webviews.set(tabId, cold);
+  const warm = countingPage({ cookies: [signedInOn("warm.test")], storage: {} });
+  S().createWindow({ url: "https://warm.test/" });
+  const id2 = Object.keys(S().tabs).find((id) => id !== tabId);
+  S().updateTab(id2, { url: "https://warm.test/", engine: "chromium" });
+  webviews.set(id2, warm);
+  assert.equal(Object.keys(S().tabs).filter((id) => webviews.get(id)).length, 2, "two Chromium pages");
+  await setSharing(true, "settings");
+  try {
+    takeSiteDataCounts();
+    const { consentToken } = await import("../telemetry/client.ts");
+    const read = await readChromium("", ["warm.test"], [], true, consentToken());
+    assert.equal(read?.data.cookies.length, 1);
+    assert.equal(cold.reads.length + jarReads(warm), 2, "both pages were asked");
+    assert.equal(takeSiteDataCounts().site_data_cookie_jar_reads, 1, "only the answered read counts");
+  } finally {
+    await setSharing(false, "settings");
+  }
+});
+
+const LOGIN = "https://login.app.test";
+const storageOnlyCarry = async (alsoCookieCarry) => {
+  await withSites(twoLabelSites, async () => {
+    const { tabId } = setup();
+    stub.siteSettingsDb.set("\nhttps://app.test", { cookies: "block" });
+    stub.siteSettingsDb.set(`\n${LOGIN}`, { cookies: "allow" });
+    try {
+      const { learnRegistrableDomains } = await import("./siteDataDomains.ts");
+      await learnRegistrableDomains(["login.app.test", "app.test", "other.test"]);
+      S().updateTab(tabId, { url: `${LOGIN}/home` });
+      webviews.set(tabId, chromiumPage({ cookies: [cookieOn("sid", ".app.test"), signedInOn("other.test")], storage: { [LOGIN]: [["token", "t1"]] } }));
+      const carries = [carrySite("", "app.test", "webkit", { origin: LOGIN, consent: null })];
+      if (alsoCookieCarry) carries.push(carrySite("", "other.test", "webkit", { origin: "https://other.test", consent: null }));
+      await Promise.all(carries);
+      assert.deepEqual(webKit.storage[LOGIN], [["token", "t1"]], "the allowed origin's saved data reaches WebKit");
+      assert.ok(!webKit.cookies.some((c) => c.domain === ".app.test"), "the blocked domain's cookie stays behind");
+      if (alsoCookieCarry) assert.ok(webKit.cookies.some((c) => c.domain === ".other.test"), "the cookie carry in the same batch still lands");
+    } finally {
+      stub.siteSettingsDb.delete("\nhttps://app.test");
+      stub.siteSettingsDb.delete(`\n${LOGIN}`);
+    }
+  });
+};
+
+test("a carry whose cookie domains are all blocked still carries its allowed origin's saved data, alone in its batch", () => storageOnlyCarry(false));
+
+test("a carry whose cookie domains are all blocked still carries its allowed origin's saved data beside a cookie carry in the same batch", () => storageOnlyCarry(true));
+
+test("a carry isn't a main-thread job while it waits for Chromium's cookie reply", async () => {
+  const jobs = await import("../app/jobActivity.ts");
+  jobs.forgetActivitiesForTests();
+  const { tabId } = setup();
+  const page = countingPage({ cookies: [signedInOn("wait.test")], storage: {} });
+  webviews.set(tabId, page);
+  const answer = page.holdReads();
+  const carry = carrySite("", "wait.test", "webkit", { origin: "https://wait.test", consent: null });
+  for (let i = 0; i < 100 && !page.reads.some((r) => r.domains.includes("wait.test")); i++) await new Promise((resolve) => setTimeout(resolve, 5));
+  const waiting = Date.now() + 1;
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(jobs.activityDuring(waiting, Date.now(), Date.now(), jobs.holdsMainThread), "none", "a pending reply holds nothing");
+  answer();
+  assert.equal((await carry).cookies, 1);
 });

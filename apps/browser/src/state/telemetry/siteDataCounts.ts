@@ -1,5 +1,5 @@
 import type { PageEngine } from "../../platform/tabs";
-import { counted, onConsentPeriodChange, type ConsentToken } from "./choice";
+import { counted, onConsentPeriodChange, stillValid, type ConsentToken } from "./choice";
 
 const none = () => ({
   site_data_carries_to_webkit: 0,
@@ -23,6 +23,11 @@ const none = () => ({
   site_data_clear_wait_timeouts: 0,
   site_data_sites_unresolved: 0,
   site_data_storage_over_quota: 0,
+  site_data_blocked_cookies_held: 0,
+  site_data_chromium_reads: 0,
+  site_data_cookie_jar_reads: 0,
+  site_data_cookie_jar_ms_total: 0,
+  site_data_cookie_jar_ms_max: 0,
 });
 
 let tally = none();
@@ -69,6 +74,21 @@ const SKIP_FIELDS = {
 
 export function noteSiteDataOverQuota(keys: number, consent: ConsentToken | null) {
   if (keys > 0) counted(consent, () => void (tally.site_data_storage_over_quota += keys));
+}
+
+export function noteSiteDataBlockedCookies(cookies: number, consent: ConsentToken | null) {
+  if (cookies > 0) counted(consent, () => void (tally.site_data_blocked_cookies_held += cookies));
+}
+
+export function noteCookieJarRead(requests: (ConsentToken | null)[], answered: number, ms: number) {
+  const rounded = Math.max(0, Math.round(ms));
+  for (const consent of requests) counted(consent, () => void tally.site_data_chromium_reads++);
+  if (!answered) return;
+  counted(requests.find((consent) => stillValid(consent)) ?? null, () => {
+    tally.site_data_cookie_jar_reads += answered;
+    tally.site_data_cookie_jar_ms_total += rounded;
+    tally.site_data_cookie_jar_ms_max = Math.max(tally.site_data_cookie_jar_ms_max, rounded);
+  });
 }
 
 export function noteSiteDataSkip(reason: keyof typeof SKIP_FIELDS, consent: ConsentToken | null) {

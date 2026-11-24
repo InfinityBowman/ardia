@@ -7,6 +7,15 @@ per request (`{"id", "result"}` or `{"id", "error": {"code", "message"}}`), and 
 on; with it off every request answers `failed` "Control is off." (`state/automation/controlSocket.ts`). The contract
 with the command (protocol numbers, `hello`) is in `docs/cli.md` › The contract.
 
+On macOS a client that isn't the bundled `ardia` (or another hardened program signed with Ardia's Team ID) is held
+before its first line is read until the user allows it in the doorbell; a client that's refused reads one line,
+`{"id": null, "error": {"code": "refused", "message": …}}`, and the socket closes. Who gets in, how approvals are kept
+and revoked, and the test-instance rule are in `docs/automation.md` › Who the program is. Every admitted connection is
+the owner: the methods below don't vary by client. `usage_counts.cli_socket_doorbells_shown` and
+`cli_socket_doorbell_<outcome>` (`once`, `half_hour`, `always`, `deny`, `unshown`, `timeout`, `left`, `stopped`,
+`unsaved`) count the doorbells and how they ended. A program the socket admitted can ask it for the engine's DevTools
+token (`control.devtoolsEndpoint`, › The DevTools token) instead of reading `ArdiaControl.json`.
+
 This page is the map of the whole profile against the socket: every data point Ardia keeps, where it lives, and which
 methods read and change it. The goal is full control: anything a person can see or change in Ardia, the command can
 read and change, through the same store actions the UI calls, so every invariant, sync write, undo, saved document and
@@ -264,6 +273,7 @@ changes it today, 🔍 read only, 🗺️ designed below, ⛔ deliberately not e
 | `methods` | no | This catalogue |
 | `commands` | no | The command catalogue `run` takes |
 | `windows` | no | Windows and their tabs, with each tab's DevTools target |
+| `control.devtoolsEndpoint` | no | The engine's DevTools token connection: `{port, token, generation}` (see › The DevTools token) |
 | `workspace` | no | The sidebar tree of a window or profile: pinned, groups, tabs, with usage on request |
 | `apply` | yes | A batch of ops on tabs, groups and pins (`docs/automation.md`): `open`, `tab.*`, `group.*` |
 | `run` | yes | Runs a menu command in a window or on a tab |
@@ -276,7 +286,7 @@ changes it today, 🔍 read only, 🗺️ designed below, ⛔ deliberately not e
 
 | Area | Read | Write |
 | --- | --- | --- |
-| tabs | `tabs.list {window?, profile?}`, `tabs.get {tab}` | `tabs.navigate {tab, url}`, `tabs.reload`, `tabs.back`, `tabs.forward`, `tabs.duplicate`, `tabs.setPinnedUrl {tab, url?}`, `tabs.returnToPinnedUrl` |
+| tabs | `tabs.list {window?, profile?}`, `tabs.get {tab}` | `tabs.navigate {tab, url}`, `tabs.reload`, `tabs.back`, `tabs.forward`, `tabs.duplicate`, `tabs.setPinnedUrl {tab, url?}`, `tabs.returnToPinnedUrl`, `tabs.hold {session, tabs, seconds?}` → `{held, gone, seconds, engineKeeps?}` and `tabs.release {session}`: a session keeps the tabs it drives loaded (Memory Saver's `cliSession` veto, and their profile isn't unloaded). On macOS Chromium's own discards keep them too: the app hands the engine each held tab with the wall-clock time its hold ends (`until`, in ms), which the engine turns into its own deadline when the update arrives (so time an update spends queued never lengthens a hold; at most 300 s), on every change and every 10 s while any hold lasts (`engine.setCliHeldTabs {tabs: [{tabId, until}]}`, an empty list when the socket stops), `tabs.hold` answers only once the engine has them and `tabs.release` only once the engine has let them go, with `engineKeeps: true` only when the engine marked every held tab and the hold is still running when the answer goes out (false when it didn't answer within 3 s, refused, found no page for a tab, or the hold had already ended) (only Ardia's own budget keeps the tabs then; macOS only), and the engine's discard veto keeps a tab with kept-by code 103 until that deadline (so a hold the app forgets, for example across a JS reload, still ends) through Memory Saver's timer, urgent and frozen-memory discards and a queued idle-profile unload, while the tab menu's Sleep Tab still puts one to sleep. On Linux and Windows Chromium keeps them only while a debugger is attached. Each call replaces that session's list and lasts at most 300 s on the app's own clock, so the session renews while it works. One session's release never ends another's hold, at most 4 sessions hold at once, a hold nobody renews runs out, and the socket stopping ends them all. `tabs.hold {…, untilDisconnect: true}` ties the hold to the connection that sent it instead of a timer: it needs no renewing (`seconds` answers null), the app renews the engine's 300 s deadline itself every 10 s, and it ends the moment that connection closes, whatever ended the command (a crash or SIGKILL closes the socket too), or at `tabs.release` from that connection; it belongs to the connection as well as the session name, so another connection using the same name keeps its own holds and can neither replace nor release this one, a caller with no connection of its own is refused, and a timed hold still outlives the one-shot connection that sent it. `live: true` (macOS) also keeps the held tabs drawing and laying out in the background, so screenshots, hover and hit tests work without showing them: the engine raises the tab's capturer count with `stay_hidden` false while the hold lasts (`engine.setCliHeldTabs {tabs: [{tabId, until, live}]}`) and drops it when the hold ends, the tab is released, or its own deadline passes. `tabs.consoleDelta {tab, after?, generation?, limit?}` → `{entries, generation, reset, next, last, dropped, withheld, errors, more}` (macOS) reads the console warnings, errors and uncaught exceptions the engine has kept for the tab since it joined a tab strip (the last 200, text cut to 2048 bytes): pass the reply's `next` as `after` and its `generation` as `generation` (a replaced ring or a watermark past its end starts over with `reset: true`), `dropped` counts entries that left the ring unread, `withheld` those from frames Chrome's DevTools policy keeps from inspection, a tab the policy keeps from inspection is refused, and each entry has `seq`, `level`, `exception`, `mainFrame`, `text`, `source`, `line` and `time` |
 | windows | `windows.get {window}`, `windows.geometry {window}` | `windows.create {profile?, url?, layout?}`, `windows.close`, `windows.focus`, `windows.setLayout {window, layout?, tabsShown?}`, `windows.switchProfile`, `windows.merge`, `windows.setFrame {window, frame}`, `windows.setMaximized {window, on}`, `windows.setFullScreen {window, on}` |
 | closed | `closed.list {window?}` | `closed.restore {id, window?}`, `closed.clear {window?}` → `{cleared}`; both act on the window's profile, the last focused main window when `window` is left out, and answer `no_window` when there's none |
 | profiles | `profiles.list` | `profiles.create`, `profiles.update`, `profiles.setLook`, `profiles.reorder`, `profiles.setDefault`, `profiles.delete {profile}` (Ardia asks the user first) |
@@ -288,7 +298,7 @@ changes it today, 🔍 read only, 🗺️ designed below, ⛔ deliberately not e
 | downloads | `downloads.list {profile?, state?, limit?, offset?}` (live progress for running downloads), `downloads.settings {profile?}` | `downloads.pause`, `downloads.resume`, `downloads.cancel`, `downloads.keep`, `downloads.open`, `downloads.reveal`, `downloads.remove`, `downloads.clear`, `downloads.setSettings` |
 | settings | `settings.get {keys?}`, `settings.schema` | `settings.set {values}`, `settings.reset {keys}` |
 | search | `search.engines` (`default` is the engine searches use, an extension's when one controls it, with `controlledBy`) | `search.setDefault {id}` (`refused` while an extension controls it, as Settings disables the picker; so is `settings.set {searchEngine}`), `search.add`, `search.update`, `search.remove` |
-| sites | `sites.origins {profile?}`, `sites.get {origin, profile?}`, `sites.zoomLevels {profile?}` | `sites.set {origin, type, value}`, `sites.reset {origin}`, `sites.setZoom {host, zoom}`, `sites.clearData {site}` |
+| sites | `sites.origins {profile?}`, `sites.get {origin, profile?}`, `sites.zoomLevels {profile?}`, `sites.adBlocker` → `{enabled, allowedSites}` | `sites.set {origin, type, value}`, `sites.reset {origin}`, `sites.setZoom {host, zoom}`, `sites.clearData {site}`, `sites.allowAds {site}` → `{site, trusted, covers, enabled, allowedSites}` and `sites.blockAds {site}` → `{site, removed, trusted, coveredBy?, enabled, allowedSites}`: the built-in uBlock Origin's trusted sites, the list Site Controls' Block Ads & Trackers switch edits (shared by every profile, from the next load). `allowAds` trusts the site and its subdomains, as the switch does (`covers` says so); the site can't be a public suffix (Chromium's list, private section included) or an IP address, so `co.uk`, `github.io` and `s3.amazonaws.com` are refused, while a name under a top-level domain the list doesn't know, like `wiki.intranet.corp`, counts as one site, as Chromium counts it. `blockAds` takes out exactly that entry (`contentBlocker.removeAllowed`): never a broader entry or one uBlock ships with; it answers `removed`, and `trusted` with `coveredBy` when a broader entry still lets the site through, and is refused naming the broader entry when the site itself isn't listed. An Ardia whose host lacks these calls (Linux until its engine has them) refuses both with `refused` |
 | extensions | `extensions.list {profile?}` | `extensions.install {profile?, webStore}` (the user adds it on the store page; `folder` is refused), `extensions.configure {id, siteAccess \| incognito \| userScripts}` (exactly one; `specificSites` is refused), `extensions.setEnabled {id, enabled}`, `extensions.setPinned`, `extensions.reload`, `extensions.uninstall` (Ardia asks the user first) |
 | media | `media.list` | `media.control {tab, action, seconds?}` |
 | sync | `sync.status`, `sync.devices {profile?}` | `sync.now`, `sync.setType {type, on}`, `sync.setProfile {profile, on}`, `sync.setOpenTabs {profile, on}`, `sync.sendTab {tab, device}` |
@@ -550,6 +560,53 @@ above. The dispatcher already has its single check point for this: `controlSocke
 request and `accessProblem` (`socketCatalog.ts`) refuses everything outside `PLUGIN_SESSION_METHODS` for a plugin
 connection, before params are even checked. Until the credential exists every connection is `owner`.
 
+## The DevTools token
+
+`control.devtoolsEndpoint` takes nothing and answers `{port, token, generation}`: the loopback port, the token and the
+generation of the engine's token connection, the one `ardia browse` speaks CDP over (`docs/cli.md`). It's how the
+command gets the token without reading `ArdiaControl.json`, so the token reaches only programs the socket let in: the
+bundled `ardia` and Ardia's other signed code, programs you allowed in the doorbell, and, in test instances, any
+process of the user, as for every method. The engine's server restarting moves `generation`; a client keeps the
+generation it was given and asks again when a connection is refused.
+
+- **Who gets it.** Only a connection the socket admitted. Native checks again on its own queue, before and after it
+  reads the token and once more after reading it, that the connection is still open and its approval still live, and a reply to a connection whose
+  approval ran out meanwhile is dropped (`ControlSocket.admits`, `reply`). A 30-minute approval that runs out, or
+  one removed in Settings, closes the connection, so the client sees the stream end rather than a reply. Before
+  starting each line, native checks the approval, so a line queued behind a slow reader never starts after it ends; a line already being written then is finished, as for every reply, and the token in it was
+  given while the approval held.
+- **A token outlives the approval.** The engine checks only the token, not the doorbell, so a program that got it
+  (even one allowed once) can use it until the token connection restarts: control off and on, or Ardia quitting.
+  Removing a program's approval stops it asking again; it doesn't take back a token it already has.
+- **Control off** answers `failed` "Control is off.", when the request arrives and again when the read comes back.
+  Turning it off first cuts native off, synchronously and before the rest of the stop (`ArdiaAutomation.cutOff`): from
+  then on native writes no line that hasn't started, hands out no token and admits no connection, until the socket
+  starts again.
+  Like every request, this one is abandoned when its peer stops writing (› A request lives only while its connection
+  and consent do): keep the write side open until the reply arrives. It then answers `failed` "The connection closed
+  before the token was ready." if anything is still written.
+- **Where it comes from.** The engine call `ac_cli_devtools_endpoint` when the engine has it (it answers
+  `{port, generation, token}` through `ArdiaEngineBridge.callForSecretReply`, whose bytes are wiped after parsing);
+  the engine's shared status (`ac_cli_control`, which also feeds `cliControl` events and JS state) is never trusted to
+  carry the token. Until the engine has that call, `ArdiaControl.json`, read by the app only if it is a regular file
+  of the user's with no group or other bits and no access list letting anyone else in, not a link, at most 64 KiB, and
+  its `port`, `generation` and `pid` match the running server (`ControlPeerCore/DevtoolsEndpoint.swift`). A server
+  that stops just after the read leaves a token that opens nothing; the next connection fails and the client asks
+  again.
+- **Errors.** `failed` when the token connection isn't running, the token can't be read, or the server restarted
+  while Ardia read it (ask again). Where the socket has no doorbell (Linux and Windows today) the method isn't listed
+  and answers `unknown_method`, as an Ardia older than it does. A command that reads the token from here should fall
+  back to the file only on an `unknown_method` reply carrying its own request's `id`; a `refused` line with `id: null`
+  is the doorbell turning the program away, and the file isn't a way around that.
+- **Containment.** In JS the token is a `Secret` of kind `devtoolsToken` from the moment it crosses from native
+  (`platform/automation.ts`), revealed only on that one reply line (`socketDevtools.ts`); JSON, text, telemetry,
+  logs and every other reply or event drop it (`secretContainment.test.mjs`).
+- **Rollout.** The command doesn't ask for it yet: it reads `ArdiaControl.json`. Next, the command asks here and falls
+  back to the file as above; then the engine stops writing the token into the file.
+- **Telemetry.** `usage_counts.cli_socket_devtools_endpoint_<outcome>`: `given` (read and handed to the socket to
+  write; a peer that leaves or loses its approval at that moment may not receive it), `control_off`, `unsupported`,
+  `server_off`, `unreadable`, `stale`, `left`. Never the token, the port or which program asked.
+
 ## Secrets
 
 **Chosen:** the socket lists saved logins (origin and username) and autofill entries (addresses, and cards by name,
@@ -723,6 +780,53 @@ socket can pick one. Creating or using a passkey then goes to macOS: the iCloud 
 macOS, can't be answered by any app, and shouldn't be: they are the proof that the owner is present. So the socket stops
 at listing Ardia's own step, and the owner touches the sensor. A virtual authenticator (`WebAuthn.addVirtualAuthenticator`
 over DevTools) remains the way to test, never the owner's real keys.
+
+## DevTools inspection
+
+The `devtools` family (`cli_socket_calls_devtools`) inspects a tab in its own DevTools session and answers structured
+results instead of raw protocol data. Every method is in `methods` with its schema.
+
+| Method | What it answers |
+| --- | --- |
+| `devtools.perfTrace` | Records a trace (`Tracing.start`/`Tracing.end`, `durationMs` 250–30000) and answers FCP, LCP, TTFB, TBT, INP and CLS with insights: `lcp-breakdown` (TTFB, load delay, load duration, render delay), `cls-culprits` (worst session window, shifted nodes, fonts or images that finished just before), `inp-breakdown` (input delay, processing, presentation), `long-tasks` (with the script or function that ran longest), `render-blocking`, `document-latency`, `network-bottlenecks`. `reload` only on a tab the command opened |
+| `devtools.perfInsight` | The same analysis for trace events you pass (`[…]` or `{traceEvents}`, within the 1 MiB line) |
+| `devtools.issues` | A tab's DevTools Issues (CORS, cookies and SameSite, CSP, mixed content, deprecations, …), each with an explanation, a fix and the affected request, element, source line or cookie (name, domain, path; never the value or raw cookie line). Or explains `issues` you pass |
+| `devtools.stackTrace` | An error and its `Error.cause` chain with every frame mapped through source maps. Maps come only from what you pass: `sourceMaps` (a map, its JSON or a `data:` URL) or `scripts` (a script's text, whose inline `data:` map is read). Ardia fetches nothing |
+| `devtools.causeChainFunction` | A function declaration for `Runtime.callFunctionOn` on an error that answers its cause chain in the shape `devtools.stackTrace` takes |
+| `devtools.styles` | For the first element matching `selector`, which declaration wins each property (selector, specificity, origin, stylesheet line), each overridden one with why it lost, and the computed value |
+| `devtools.logpoint`, `devtools.logpoints`, `devtools.clearLogpoint` | Non-pausing logpoints on a tab the command opened; `url` may be an original source path named by a script's inline `data:` source map, and then the logpoint binds to that one script (`Debugger.setBreakpoint` by script id), not to every script sharing its URL. A logpoint the tab won't remove stays listed so it can be cleared again. The condition wraps the expression so it always answers `false`, so the page never pauses. The expression and condition are **not** a sandbox: they run as the page's own JavaScript where the line runs, with the page's privileges, and can change page state, so keep them to reads. At most 50 per connection; they end when the connection closes or control stops |
+
+**Scope.** A trace counts only the inspected tab: its main frame's navigation, its frames' requests and its renderer process, from the selected navigation's start up to the next one.
+
+**Isolation.** `InspectionSession` (`state/automation/devToolsSession.ts`) sends only `INSPECTION_METHODS`, never an
+emulation, network or audit override, so it can't reset what the command or DevTools set. Each session belongs to the
+connection that opened it and ends when that connection closes or control stops, even mid-trace or while still
+opening; once it starts closing it refuses new commands and waits for the ones in flight, for at most two seconds, before it cleans up; the transport is always closed, and an open still pending when its connection closes is abandoned at once. When it closes it removes its
+breakpoints, ends its trace and disables only the domains it enabled. Each trace is recorded into a buffer owned by
+that call and analysed into a model built for that call, so nothing carries over from one trace to the next.
+
+**Field data is opt-in.** `includeFieldData: true` with your `fieldDataKey` asks the public field-data service for
+real-user metrics of the traced page's origin, read from the tab after the trace ends: only the origin, never a path or
+query. When the trace has no page load to tie it to (record with `reload`), or the page changed origin during the trace, `fieldData` is `{skipped}` instead. Nothing is sent without it,
+and never for a private window's page.
+
+**Engine.** The tab-reading methods need an event-capable inspection session from the engine (#3993); until it lands
+they answer `failed` with "This Ardia can't open a DevTools inspection session on a tab yet." The analysers
+(`perfInsight`, `issues` given `issues`, `stackTrace`, `causeChainFunction`) work now. Ardia's app makes no request
+for a source map: React Native's `fetch` follows redirects and buffers whole bodies, so it can't enforce the limits
+such a fetch needs.
+
+**Why not the DevTools frontend's own trace engine.** `third_party/devtools-frontend`'s `models/trace` handlers and
+insights depend on its `core/i18n`, `core/platform` and `lantern` modules. Bundling them into the app's Hermes bundle
+would add megabytes to launch for a feature only the command uses. The analyser here reads the same trace events
+(`navigationStart`, `largestContentfulPaint::Candidate`, `LayoutShift`, `EventTiming`, `RunTask`, `Resource*`)
+with the same thresholds. To adopt the frontend's engine later, build `front_end/models/trace/trace.ts` with esbuild
+into a separate bundle that is loaded only when a `devtools.*` method first runs, and keep `analyzeTrace`'s answer shape.
+
+**Telemetry** (counts only): `cli_devtools_traces`, `cli_devtools_trace_failures`, `cli_devtools_trace_analysis_ms`,
+`cli_devtools_field_data_requests`, `cli_devtools_issues_reported`, `cli_devtools_source_maps_resolved`,
+`cli_devtools_source_maps_failed`, `cli_devtools_style_lookups`, `cli_devtools_logpoints_set`,
+`cli_devtools_logpoints_refused`.
 
 ## Next
 
