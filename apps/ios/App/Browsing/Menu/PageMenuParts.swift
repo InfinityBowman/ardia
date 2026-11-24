@@ -39,6 +39,8 @@ enum PageMenuLayout {
   static let dimClear = Animation.easeOut(duration: 0.08)
   static let prewarmDelay: Duration = .seconds(1.5)
   static let expand = Animation.spring(response: 0.25, dampingFraction: 1)
+  static let rowsAppear = Animation.easeOut(duration: 0.2)
+  static let rowsDisappear = Animation.easeOut(duration: 0.12)
   static let contentShown: CGFloat = 0.45
   static let separator: CGFloat = 1
 
@@ -147,6 +149,17 @@ struct PageMenuRowStyle: ButtonStyle {
   }
 }
 
+struct PageMenuDisclosureStyle: ButtonStyle {
+  let onPress: () -> Void
+
+  func makeBody(configuration: Configuration) -> some View {
+    PageMenuRowStyle().makeBody(configuration: configuration)
+      .onChange(of: configuration.isPressed) { _, pressed in
+        if pressed { onPress() }
+      }
+  }
+}
+
 struct PageMenuPressStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
@@ -206,6 +219,7 @@ struct PageMenuDisclosureRow: View {
   let title: LocalizedStringKey
   var icon: String?
   let isExpanded: Bool
+  let onPress: () -> Void
   let toggle: () -> Void
 
   var body: some View {
@@ -218,7 +232,7 @@ struct PageMenuDisclosureRow: View {
           .accessibilityHidden(true)
       }
     }
-    .buttonStyle(PageMenuRowStyle())
+    .buttonStyle(PageMenuDisclosureStyle(onPress: onPress))
     .foregroundStyle(.primary)
     .accessibilityValue(isExpanded ? Text("Expanded") : Text("Collapsed"))
   }
@@ -260,6 +274,12 @@ struct PageMenuToggleRow: View {
   }
 }
 
+extension Binding where Value == Bool {
+  static func storedFlag(_ key: String) -> Binding<Bool> {
+    Binding(get: { UserDefaults.standard.bool(forKey: key) }, set: { UserDefaults.standard.set($0, forKey: key) })
+  }
+}
+
 struct PageMenuDisclosureGroup<Rows: View>: View {
   let title: LocalizedStringKey
   var icon: String?
@@ -280,25 +300,21 @@ struct PageMenuDisclosureGroup<Rows: View>: View {
   }
 
   var body: some View {
-    let reveal: CGFloat = shown ? 1 : 0
-    PageMenuRevealLayout(reveal: reveal) {
-      PageMenuDisclosureRow(title: title, icon: icon, isExpanded: shown) {
-        HarnessProbe.mark("menu.disclosure")
-        mounted = true
-        withAnimation(revealAnimation, completionCriteria: .removed) {
-          shown.toggle()
-        } completion: {
-          if !shown { mounted = false }
-        }
-        isExpanded = shown
-      }
+    VStack(spacing: 0) {
+      PageMenuDisclosureRow(title: title, icon: icon, isExpanded: shown, onPress: prepare, toggle: toggle)
       if mounted {
         Group(subviews: rows) { subviews in
           ForEach(subviews) { subview in
-            Palette.menuSeparator.frame(idealHeight: PageMenuLayout.separator)
-            PageMenuRevealSlot { subview }
+            Palette.menuSeparator
+              .frame(height: shown ? PageMenuLayout.separator : 0)
+            subview
+              .fixedSize(horizontal: false, vertical: true)
+              .frame(height: shown ? nil : 0, alignment: .top)
               .clipped()
           }
+        }
+        .animation(shown ? PageMenuLayout.rowsAppear : PageMenuLayout.rowsDisappear) {
+          $0.opacity(shown ? 1 : 0)
         }
         .allowsHitTesting(shown)
         .accessibilityHidden(!shown)
@@ -313,51 +329,28 @@ struct PageMenuDisclosureGroup<Rows: View>: View {
       mounted = expanded
     }
   }
-}
 
-struct PageMenuRevealLayout: SwiftUI.Layout {
-  var reveal: CGFloat
-
-  var animatableData: CGFloat {
-    get { reveal }
-    set { reveal = newValue }
+  private func prepare() {
+    guard !mounted else { return }
+    var instant = Transaction()
+    instant.disablesAnimations = true
+    withTransaction(instant) { mounted = true }
   }
 
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let width = proposal.width ?? subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
-    return CGSize(width: width, height: slots(heights(subviews, width: width)).reduce(0, +))
+  private func toggle() {
+    HarnessProbe.mark("menu.disclosure")
+    let target = !shown
+    isExpanded = target
+    prepare()
+    reveal(target)
   }
 
-  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-    let heights = heights(subviews, width: bounds.width)
-    var top = bounds.minY
-    for (index, slot) in slots(heights).enumerated() {
-      subviews[index].place(at: CGPoint(x: bounds.minX, y: top), anchor: .topLeading,
-                            proposal: ProposedViewSize(width: bounds.width, height: slot))
-      top += slot
+  private func reveal(_ target: Bool) {
+    withAnimation(revealAnimation, completionCriteria: .removed) {
+      shown = target
+    } completion: {
+      if !shown { mounted = false }
     }
-  }
-
-  private func heights(_ subviews: Subviews, width: CGFloat) -> [CGFloat] {
-    subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
-  }
-
-  private func slots(_ heights: [CGFloat]) -> [CGFloat] {
-    let shown = min(max(reveal, 0), 1)
-    return heights.enumerated().map { index, height in index == 0 ? height : height * shown }
-  }
-}
-
-struct PageMenuRevealSlot: SwiftUI.Layout {
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let content = subviews.first?.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil)) ?? .zero
-    return CGSize(width: proposal.width ?? content.width, height: proposal.height ?? content.height)
-  }
-
-  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-    guard let content = subviews.first else { return }
-    let height = content.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil)).height
-    content.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: height))
   }
 }
 

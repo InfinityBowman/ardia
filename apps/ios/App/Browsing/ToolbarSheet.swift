@@ -25,7 +25,6 @@ struct ToolbarSheet: View {
   @State private var addressFrame: CGRect?
   @State private var windowRoom: CGFloat = .greatestFiniteMagnitude
   @State private var followUp: PendingFollowUp?
-  @AppStorage("pageMenu.displayOptionsExpanded") private var showsDisplay = false
   @State private var showsMore = false
   @State private var scrollPosition = ScrollPosition(edge: .top)
   @ScaledMetric(relativeTo: .body) private var capsuleHeight: CGFloat = PageMenuLayout.addressHeight
@@ -46,7 +45,7 @@ struct ToolbarSheet: View {
         }
         VStack(spacing: PageMenuLayout.groupSpacing) {
           PageMenuDownloads { close(then: .sheet(.downloads)) }
-          PageMenuDisclosureGroup(title: "Display Options", icon: "doc.text.image", isExpanded: $showsDisplay) {
+          PageMenuDisclosureGroup(title: "Display Options", icon: "doc.text.image", isExpanded: .storedFlag("pageMenu.displayOptionsExpanded")) {
             if let page {
               translateRow
               nightShadeRow(page)
