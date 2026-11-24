@@ -60,6 +60,8 @@ public final class WebTab: DiscardablePage, Identifiable {
   @ObservationIgnored private var pendingURL: URL?
   @ObservationIgnored private var swipeSnapshots: [ObjectIdentifier: UIImage] = [:]
   @ObservationIgnored private var swipeSnapshotOrder: [ObjectIdentifier] = []
+  @ObservationIgnored public private(set) var committedNavigations = 0
+  @ObservationIgnored public private(set) var isProvisional = false
   @ObservationIgnored var videoFrames: [WKFrameInfo] = []
   @ObservationIgnored var videoPress: VideoPressHandler?
 
@@ -395,6 +397,7 @@ public final class WebTab: DiscardablePage, Identifiable {
   }
 
   fileprivate func didStartNavigation() {
+    isProvisional = true
     failure = nil
   }
 
@@ -411,6 +414,8 @@ public final class WebTab: DiscardablePage, Identifiable {
   }
 
   fileprivate func didCommit() {
+    committedNavigations += 1
+    isProvisional = false
     capturingOrigins = [:]
     blockedResources.reset()
     scrollTracker.reset()
@@ -447,6 +452,7 @@ public final class WebTab: DiscardablePage, Identifiable {
   }
 
   fileprivate func didFail(_ error: Error, provisional: Bool) {
+    if provisional { isProvisional = false }
     let error = error as NSError
     if error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled { return }
     if error.domain == WKError.errorDomain && error.code == 102 { return }

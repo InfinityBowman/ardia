@@ -81,6 +81,7 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   private let refreshControl = UIRefreshControl()
   private let coverView = UIImageView()
   private var reveal: Reveal = .none
+  private var revealPending = false
   private var revealDeadline: Task<Void, Never>?
   private var layoutObservation: NSKeyValueObservation?
   private var scrollObservation: NSKeyValueObservation?
@@ -257,20 +258,26 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   }
 
   private func revealAfterPresentation() {
-    guard let webView else { return }
+    guard let webView, !revealPending else { return }
+    revealPending = true
+    layoutObservation = nil
     let configuration = WKSnapshotConfiguration()
     configuration.afterScreenUpdates = true
     configuration.snapshotWidth = 8
-    Task { @MainActor [weak self, weak webView] in
-      try? await Task.sleep(for: .milliseconds(150))
-      guard let self, let webView, self.webView === webView, case .whenPainted = self.reveal else { return }
-      webView.takeSnapshot(with: configuration) { [weak self, weak webView] _, _ in
-        MainActor.assumeIsolated {
-          guard let self, self.webView === webView, case .whenPainted = self.reveal else { return }
-          self.hideCover(animated: true)
-        }
+    webView.takeSnapshot(with: configuration) { [weak self, weak webView] _, _ in
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        self.revealPending = false
+        guard self.webView === webView, case .whenPainted = self.reveal else { return }
+        HarnessProbe.mark("page.revealed")
+        self.hideCover(animated: true)
       }
     }
+  }
+
+  private var hasPaintedCommittedPage: Bool {
+    guard let page, let webView, page.committedNavigations > 0, !page.isProvisional else { return false }
+    return webView.scrollView.contentSize.height > 0
   }
 
   private func waitForPresentation(of webView: WKWebView) {
@@ -288,16 +295,17 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   private func updateReveal(isLoading: Bool, progress: Double) {
     guard case .whenPainted(let sawLoading) = reveal else { return }
     if isLoading, !sawLoading { reveal = .whenPainted(sawLoading: true) }
-    if sawLoading || isLoading, !isLoading { hideCover(animated: true) }
+    if sawLoading || isLoading, !isLoading {
+      hideCover(animated: true)
+    } else if hasPaintedCommittedPage {
+      revealAfterPresentation()
+    }
   }
 
   private func watchFirstLayout(of webView: WKWebView) {
-    let start = webView.scrollView.contentSize
-    layoutObservation = webView.scrollView.observe(\.contentSize, options: [.new]) { [weak self] scrollView, _ in
+    layoutObservation = webView.scrollView.observe(\.contentSize, options: [.new]) { [weak self] _, _ in
       MainActor.assumeIsolated {
-        guard let self, case .whenPainted(let sawLoading) = self.reveal, sawLoading || self.page?.isLoading == true,
-              scrollView.contentSize != start, scrollView.contentSize.height > scrollView.bounds.height + 1 else { return }
-        self.layoutObservation = nil
+        guard let self, case .whenPainted = self.reveal, self.hasPaintedCommittedPage else { return }
         self.revealAfterPresentation()
       }
     }
