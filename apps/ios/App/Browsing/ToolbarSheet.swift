@@ -113,7 +113,7 @@ struct ToolbarSheet: View {
     .presentationCornerRadius(MenuLayout.sheetRadius)
     .presentationBackground(Palette.menuSheet)
     .presentationDragIndicator(.hidden)
-    .sensoryFeedback(.success, trigger: copies)
+    .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: copies)
     .onDisappear(perform: finishClosing)
     .modifier(PageMenuShownWatcher {
       showsMore = false
@@ -290,7 +290,6 @@ struct ToolbarSheet: View {
       actionButton("link", label: "Copy Link") {
         guard let tabID, app.copyLink(of: tabID) else { return }
         copies += 1
-        UIAccessibility.post(notification: .announcement, argument: String(localized: "Copied URL"))
         leave()
       }
       Spacer(minLength: 0)

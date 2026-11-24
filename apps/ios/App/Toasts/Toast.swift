@@ -45,6 +45,10 @@ extension Toast {
     Toast(String(localized: "Copied URL"), symbol: "link")
   }
 
+  static var copiedLink: Toast {
+    Toast(String(localized: "Copied"), symbol: "checkmark", duration: .seconds(1.2))
+  }
+
   static var copiedURLWithoutTrackers: Toast {
     Toast(String(localized: "Copied URL Without Trackers"), symbol: "link")
   }

@@ -14,7 +14,7 @@ extension AppModel {
   func copyLink(of tabID: UUID) -> Bool {
     guard let tab = tabs.tab(tabID), let url = URL(string: tab.url), BrowserURL.isSyncable(tab.url) else { return false }
     web.copyLink(url)
-    browse.showTitleFeedback(String(localized: "Copied URL"))
+    toasts.show(.copiedLink)
     return true
   }
 
