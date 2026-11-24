@@ -1061,3 +1061,26 @@ history entry). Arc's visually complete times (frame ≥ 95 % like the settled p
 - Ruled out: `ProgressThrottle` only throttles the published value. Omnibox resolution before `load()`
   takes < 10 ms. Content-rule lists are applied synchronously, with no wait on compilation. Night Shade
   and the blocking scripts don't block. The main thread was idle during the gap.
+
+### 6.13 Pull to refresh and the loading line (owner's iPhone, 2026-11-24, 60 fps, vercel.com, Ardia then Arc on the same phone)
+
+*Release* is the frame where the pull peaks. Offsets are in pt.
+
+| | Ardia (before) | Arc Search |
+|---|---|---|
+| Peak pull | 224–234 pt | 226–258 pt |
+| After release | springs to the spinner (60 pt) and **holds** until the reload commits: 0.87 s and 1.2 s | springs straight back (half the distance in ≈ 0.15 s, settled ≈ 0.4 s); no hold |
+| Old page | replaced at commit while still pulled down | stays on screen until the new page paints |
+| Release → new page's first paint | 0.87 s, 1.53 s | 0.73 s (first pull after an app switch), 0.25 s, 0.29 s |
+| Black between old and new page | 26 frames (0.43 s): Vercel's nav on black, no hero | 2–4 frames: hero text present, only the triangle's glow missing |
+| Loading line appears | 0.14–0.17 s after release (150 ms reveal delay) | at release |
+| Line fill | tracks estimatedProgress: 30 %, stalls until commit, fills only at didFinish (0.6 s and 2.4 s after commit) | creeps until the new page paints, then fills to full in ≈ 0.5 s (ease-out) starting 0.15–0.35 s after commit |
+| Full → gone | 0.12 s | holds full 0.27–0.45 s, fades 0.33–0.4 s |
+| Release → everything still | 1.9 s, 3.9 s | 1.6–2.1 s |
+
+- Ardia now ends the refresh when the finger lifts, keeps one refresh control per web view (before, a moved
+  control stayed hidden, so pull to refresh never fired on tabs opened from search), lets short pages
+  bounce, and fills the line at DOMContentLoaded (or didFinish) on 0.5 s fill / 0.3 s hold / 0.35 s fade.
+- The 0.43 s black gap does not reproduce on the simulator (0–4 black frames). `reload()` there doesn't
+  revalidate cached subresources: a test server saw only the HTML re-requested. A same-device trace on a
+  phone is still needed to place it.
