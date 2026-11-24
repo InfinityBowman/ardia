@@ -5,11 +5,27 @@ enum PageScripts {
 
   static let readiness = #"""
   (() => {
-    const post = () => {
-      try { window.webkit.messageHandlers.ardiaPage.postMessage({ type: "ready" }).catch(() => {}); } catch (e) {}
+    const send = (type) => {
+      try { window.webkit.messageHandlers.ardiaPage.postMessage({ type }).catch(() => {}); } catch (e) {}
     };
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", post, { once: true });
-    else post();
+    const shown = () => requestAnimationFrame(() => requestAnimationFrame(() => send("shown")));
+    const ready = () => { send("ready"); shown(); };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready, { once: true });
+    else ready();
+    addEventListener("pageshow", (event) => { if (event.persisted) shown(); });
+    addEventListener("popstate", () => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        observer.disconnect();
+        clearTimeout(timer);
+        shown();
+      };
+      const observer = new MutationObserver(finish);
+      observer.observe(document.documentElement, { childList: true, characterData: true, subtree: true });
+      const timer = setTimeout(finish, 250);
+    });
   })();
   """#
 

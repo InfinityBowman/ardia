@@ -38,6 +38,7 @@ public final class WebTab: DiscardablePage, Identifiable {
   public private(set) var pageZoom = 1.0
   public private(set) var isFindingInPage = false
   public private(set) var isContentReady = false
+  @ObservationIgnored public private(set) var pageShows = 0
   public var request: PageRequest?
   public let blockedResources = BlockedResourceCounter()
 
@@ -447,6 +448,10 @@ public final class WebTab: DiscardablePage, Identifiable {
     default: engine.tabs.tab(id)?.origin == .typed && lastVisit == nil ? .typed : .link
     }
     lastVisit = engine.tabs.recordVisit(url: committed, title: webView?.title ?? "", transition: transition, fromTab: id)
+  }
+
+  func pageWasShown() {
+    pageShows += 1
   }
 
   func documentBecameReady() {

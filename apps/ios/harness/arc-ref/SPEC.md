@@ -975,7 +975,7 @@ offset tracked per frame against the resting page (±2 pt, ±1 frame).
 - Ardia (since this round): the swipe starts from anywhere at any speed (it needed 120 pt/s, so slow drags
   never started), commits only when the finger lifts moving forward (> 40 pt/s; it used to commit past
   75 pt whatever the speed), settles on 0.15 s (commit) and 0.18 s (cancel) critically damped springs that
-  start at the finger's speed (was one 0.22 s spring), and drops the snapshot as soon as the page it went
+  start at the finger's speed (was one 0.22 s spring) (the commit spring is 0.22 s since §6.14), and drops the snapshot as soon as the page it went
   to has painted (was a fixed 0.25 s wait and 0.2 s fade, ≈ 0.73 s after a commit; now ≈ 0.34 s). A swipe
   that starts within 24 pt of a side edge with no history that way drives the tab pager. Harness:
   `page-swipe`.
@@ -1107,9 +1107,17 @@ Times run from the first frame that moves.
   just before every back or forward. It files each picture under its history item, compared by identity. On
   the simulator, back and forward swipes slide the right page both on script links (`page-swipe-script`,
   `fixtures/spa-a.html`) and on real loads (`page-swipe`), 7 of 7 hits; before, 0 of 2 and 3 of 4.
-- The swipe still lifts its picture once the web view reports the destination and a presentation update
-  has gone through. A page that redraws later than that on popstate shows its old content under the last
-  ≈ 0.1 s of the fade.
+- Settle on the phone, from the page offset in each frame: Arc's page goes from 50 % to 5 % of the
+  width left in 100–115 ms, and is still 0.20–0.22 s after release (0.25–0.32 s after the first motion).
+  That fits a critically damped spring with a 0.22 s response. Ardia's 0.15 s spring took 75 ms, so the
+  page stopped short. Arc shows no landing fade: its picture gives way to the live page with no visible
+  change.
+- Ardia now commits on a 0.22 s critically damped spring and goes to the page once the slide is within
+  1 % of the end, not when UIKit's spring has fully settled. The picture stays until the destination
+  reports that it has painted: two animation frames after DOMContentLoaded, after a back-forward cache
+  restore (`pageshow` with `persisted`), or after the first DOM change following `popstate` (250 ms at
+  most). It then fades over 0.12 s; the cap is 3 s. On the simulator, release to still is 0.204–0.239 s
+  and release to the live page 0.32–0.35 s, with no frame of old content after a late popstate redraw.
 
 ### 6.12 Share from the page menu (iPhone owner recording, 60 fps)
 

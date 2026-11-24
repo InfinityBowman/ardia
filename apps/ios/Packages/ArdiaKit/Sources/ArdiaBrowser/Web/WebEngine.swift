@@ -190,6 +190,14 @@ public final class WebEngine {
     }
   }
 
+  func pageWasShown(in webView: WKWebView) {
+    for id in roster.liveIDs {
+      guard let page = roster.page(id), page.webView === webView else { continue }
+      page.pageWasShown()
+      return
+    }
+  }
+
   private func broadcastNightShade() {
     for id in roster.liveIDs {
       guard let page = roster.page(id) else { continue }
@@ -243,6 +251,9 @@ final class PageMessageProxy: NSObject, WKScriptMessageHandlerWithReply {
       return (engine.preferences.nightShade(for: message.webView?.url?.host(), isPrivate: message.isFromPrivatePage).rawValue, nil)
     case "ready":
       if message.frameInfo.isMainFrame, let webView = message.webView { engine.documentBecameReady(in: webView) }
+      return (nil, nil)
+    case "shown":
+      if message.frameInfo.isMainFrame, let webView = message.webView { engine.pageWasShown(in: webView) }
       return (nil, nil)
     default:
       return (nil, nil)

@@ -106,9 +106,10 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   static let commitVelocity: CGFloat = 40
   static let beginRatio: CGFloat = 1.4
   static let beginSpeed: CGFloat = 20
-  static let commitResponse: Double = 0.15
+  static let commitResponse: Double = 0.22
+  static let landingSlack: CGFloat = 0.01
   static let cancelResponse: Double = 0.18
-  static let landingDeadline: Duration = .seconds(1.5)
+  static let landingDeadline: Duration = .seconds(3)
   static let landingFade: TimeInterval = 0.12
   static let parallax = -Layout.swipeParallax
   static let reattachDeadline: Duration = .seconds(1.5)
@@ -557,6 +558,7 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
         target = UIView()
       }
       target.backgroundColor = webView.underPageBackgroundColor ?? .systemBackground
+      target.isUserInteractionEnabled = false
       target.frame = bounds
       let shade = UIView(frame: bounds)
       shade.backgroundColor = UIColor.black.withAlphaComponent(0.12)
@@ -640,17 +642,38 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
         swipe.target.removeFromSuperview()
         return
       }
+      HarnessProbe.mark("swipe.settled")
       self.bringSubviewToFront(swipe.target)
       swipe.target.transform = .identity
       swipe.target.layer.shadowOpacity = 0
+      let shows = page.pageShows
       if swipe.direction == .back { page.goBack() } else { page.goForward() }
-      self.revealAfterSwipe(swipe)
+      self.revealAfterSwipe(swipe, after: shows)
     }
     swipeAnimator = animator
     animator.startAnimation()
+    if commit { finishWhenNearlyThere(animator, swipe) }
   }
 
-  private func revealAfterSwipe(_ swipe: SwipeState) {
+  private func finishWhenNearlyThere(_ animator: UIViewPropertyAnimator, _ swipe: SwipeState) {
+    Task { @MainActor [weak self, weak animator] in
+      while true {
+        try? await Task.sleep(for: .milliseconds(8))
+        guard let self, let animator, self.swipeAnimator === animator, animator.isRunning else { return }
+        let moving = swipe.direction == .back ? self.webView?.layer.presentation() : swipe.target.layer.presentation()
+        guard let offset = moving?.affineTransform().tx else { return }
+        let width = self.bounds.width
+        let remaining = swipe.direction == .back ? width - offset : offset
+        if remaining <= width * Self.landingSlack {
+          animator.stopAnimation(false)
+          animator.finishAnimation(at: .end)
+          return
+        }
+      }
+    }
+  }
+
+  private func revealAfterSwipe(_ swipe: SwipeState, after shows: Int) {
     let target = swipe.target
     let fade = { [weak target] in
       guard let target, target.superview != nil else { return }
@@ -664,9 +687,9 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
     Task { @MainActor [weak self, weak target] in
       let deadline = ContinuousClock.now + Self.landingDeadline
       while ContinuousClock.now < deadline {
-        guard let self, let target, target.superview === self, let webView = self.webView else { return }
+        guard let self, let target, target.superview === self, let webView = self.webView, let page = self.page else { return }
         let arrived = swipe.destination == nil || webView.url == swipe.destination
-        if arrived, !webView.isLoading || webView.estimatedProgress > 0.5 {
+        if arrived, page.pageShows > shows {
           let configuration = WKSnapshotConfiguration()
           configuration.afterScreenUpdates = true
           configuration.snapshotWidth = 8
