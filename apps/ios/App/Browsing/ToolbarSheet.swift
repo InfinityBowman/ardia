@@ -288,7 +288,10 @@ struct ToolbarSheet: View {
       }
       Spacer(minLength: 0)
       actionButton("link", label: "Copy Link") {
-        if let tabID, app.copyLink(of: tabID) { copies += 1 }
+        guard let tabID, app.copyLink(of: tabID) else { return }
+        copies += 1
+        UIAccessibility.post(notification: .announcement, argument: String(localized: "Copied URL"))
+        leave()
       }
       Spacer(minLength: 0)
       actionButton("square.and.arrow.up", label: "Share") {
