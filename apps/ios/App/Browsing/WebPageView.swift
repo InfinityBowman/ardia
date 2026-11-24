@@ -35,7 +35,7 @@ struct WebPageView: UIViewRepresentable {
     }
     view.placeholderTab = tab
     view.show(page, cover: cover, isLoading: page.isLoading, progress: page.progress, isLive: page.webView != nil)
-    view.endRefreshingIfReloaded(isLoading: page.isLoading)
+    if !page.isLoading { view.endRefreshing() }
   }
 
   static func dismantleUIView(_ view: PageContainerView, coordinator: ()) {
@@ -78,11 +78,11 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   private var placeholderHost: UIViewController?
   private weak var page: WebTab?
   private weak var webView: WKWebView?
-  private let refreshControl = UIRefreshControl()
+  private var refreshControl = UIRefreshControl()
   private let coverView = UIImageView()
   private var reveal: Reveal = .none
   private var revealPending = false
-  private var refreshCommitBaseline: Int?
+  private var refreshEndsOnRelease = false
   private var revealDeadline: Task<Void, Never>?
   private var layoutObservation: NSKeyValueObservation?
   private var scrollObservation: NSKeyValueObservation?
@@ -123,8 +123,6 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
       edge.delegate = self
       addGestureRecognizer(edge)
     }
-    refreshControl.addTarget(self, action: #selector(refreshPulled), for: .valueChanged)
-    refreshControl.tintColor = UIColor(BrowsePalette.loadingBorder)
     coverView.contentMode = .scaleAspectFill
     coverView.clipsToBounds = true
     coverView.isUserInteractionEnabled = false
@@ -217,12 +215,11 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
     }
     for other in hostedWebViews where other !== webView {
       other.isHidden = true
-      if other.scrollView.refreshControl === refreshControl { other.scrollView.refreshControl = nil }
     }
     webView.isHidden = false
     insertSubview(webView, belowSubview: coverView)
     self.webView = webView
-    webView.scrollView.refreshControl = refreshControl
+    attachRefreshControl(to: webView)
     wasLoading = next.isLoading
     observeScroll(of: webView)
     applyInsets()
@@ -256,6 +253,15 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
       guard !Task.isCancelled else { return }
       self?.hideCover(animated: true)
     }
+  }
+
+  private func attachRefreshControl(to webView: WKWebView) {
+    let control = webView.scrollView.refreshControl ?? UIRefreshControl()
+    control.removeTarget(nil, action: nil, for: .valueChanged)
+    control.addTarget(self, action: #selector(refreshPulled), for: .valueChanged)
+    control.tintColor = UIColor(BrowsePalette.loadingBorder)
+    if webView.scrollView.refreshControl !== control { webView.scrollView.refreshControl = control }
+    refreshControl = control
   }
 
   private func revealAfterPresentation() {
@@ -325,6 +331,7 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
 
   @objc private func scrollPanChanged(_ pan: UIPanGestureRecognizer) {
     guard pan.state == .ended || pan.state == .cancelled, let view = pan.view else { return }
+    if refreshEndsOnRelease { endRefreshingAfterRelease() }
     barLink?.released(velocity: pan.velocity(in: view).y)
   }
 
@@ -447,17 +454,16 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   }
 
   func endRefreshing() {
-    refreshCommitBaseline = nil
+    refreshEndsOnRelease = false
     if refreshControl.isRefreshing { refreshControl.endRefreshing() }
   }
 
-  func endRefreshingIfReloaded(isLoading: Bool) {
-    guard refreshControl.isRefreshing else { return }
-    if !isLoading {
-      endRefreshing()
-    } else if let refreshCommitBaseline, let page, page.committedNavigations > refreshCommitBaseline {
-      HarnessProbe.mark("refresh.committed")
-      endRefreshing()
+  private func endRefreshingAfterRelease() {
+    refreshEndsOnRelease = false
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.refreshControl.isRefreshing else { return }
+      HarnessProbe.mark("refresh.released")
+      self.endRefreshing()
     }
   }
 
@@ -484,8 +490,13 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
     guard let page else { return endRefreshing() }
     HarnessProbe.mark("refresh.pull")
     refreshFeedback.impactOccurred()
-    refreshCommitBaseline = page.committedNavigations
     page.reload()
+    refreshEndsOnRelease = true
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.refreshEndsOnRelease else { return }
+      let pan = self.webView?.scrollView.panGestureRecognizer.state
+      if pan != .began && pan != .changed { self.endRefreshingAfterRelease() }
+    }
     Task { @MainActor [weak self] in
       try? await Task.sleep(for: .seconds(8))
       self?.endRefreshing()
