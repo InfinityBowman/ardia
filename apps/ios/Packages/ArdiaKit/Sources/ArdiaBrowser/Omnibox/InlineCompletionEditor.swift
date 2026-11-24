@@ -86,6 +86,7 @@ public struct InlineCompletionEditor: Equatable, Sendable {
 
 public struct BindingEchoFilter: Equatable, Sendable {
   private var pending: [String] = []
+  private var synced: String?
   private static let limit = 64
 
   public init() {}
@@ -98,10 +99,13 @@ public struct BindingEchoFilter: Equatable, Sendable {
   public mutating func isExternal(_ incoming: String, current: String) -> Bool {
     if incoming == current {
       pending.removeAll()
+      synced = current
       return false
     }
     if pending.contains(incoming) { return false }
+    if incoming == synced, !pending.isEmpty { return false }
     pending.removeAll()
+    synced = nil
     return true
   }
 }

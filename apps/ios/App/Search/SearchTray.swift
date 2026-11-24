@@ -403,6 +403,7 @@ struct SearchTray<Drag: Gesture>: View {
   }
 
   private func submit(_ value: String) {
+    HarnessProbe.mark("search.submit", value)
     let model = model
     Task {
       let resolution = await model?.resolve(value)

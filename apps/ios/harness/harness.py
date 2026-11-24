@@ -55,6 +55,7 @@ TARGETS = {
     "misordered": 0,
     "ring_missing": 0,
     "ring_show_ms": 150,
+    "wrong_submits": 0,
 }
 
 CHECKS = {
@@ -67,6 +68,7 @@ CHECKS = {
     "idle-scroll": ["stall_frames", "main_busy_max_ms", "dropped_frames"],
     "download-swipe": ["ring_missing", "stall_frames", "main_busy_max_ms", "dropped_frames", "pager_first_move_ms", "pager_settle_ms"],
     "idle-swipe": ["stall_frames", "main_busy_max_ms", "dropped_frames", "pager_first_move_ms", "pager_settle_ms"],
+    "typed-url": ["wrong_submits"],
 }
 LAUNCH_ARGS = {
     "swipe-interrupt": ["-BrowsePagerScript", "-BrowseDelay", "5"],
@@ -482,6 +484,32 @@ def scenario_search_plus(sim, cycles=3):
     return steps
 
 
+TYPED_URL = "http://127.0.0.1:8777/b.html"
+TYPED_DELAYS = [1.0, 0.6, 0.35, 0.2]
+TYPED_CYCLES = len(TYPED_DELAYS)
+
+
+def scenario_typed_url(sim):
+    """Type a full URL that shares a prefix with a history page and press Return, at several delays after opening search; it must submit exactly what was typed."""
+    plus = find(sim, "New Search") or find(sim, "Add")
+    if not plus:
+        sys.exit("no + button on screen")
+    for delay in TYPED_DELAYS:
+        batch(sim, [f"tap -x {plus['x']:.0f} -y {plus['y']:.0f}", f"sleep {delay}"])
+        sh(["axe", "type", TYPED_URL, "--udid", sim])
+        sh(["axe", "key", "40", "--udid", sim])
+        time.sleep(1.5)
+    return ["sleep 0.5"]
+
+
+def analyse_submits(events, scenario):
+    if scenario != "typed-url":
+        return {}
+    submits = [e.get("detail", "") for e in events if e.get("k") == "m" and e.get("name") == "search.submit"]
+    wrong = sum(1 for s in submits if s != TYPED_URL) + max(TYPED_CYCLES - len(submits), 0)
+    return {"submitted": submits, "wrong": wrong}
+
+
 def scenario_page_menu(sim, cycles=2):
     """Tap ^ for the page menu, close it by tapping the page, then open it again and swipe it down."""
     more = find(sim, "Page Menu")
@@ -673,6 +701,7 @@ SCENARIOS = {
     "page-swipe": scenario_page_swipe,
     "display-options": scenario_display_options,
     "more-options": scenario_more_options,
+    "typed-url": scenario_typed_url,
 }
 LAUNCH_ARGS["deck-turnback"] = ["-ArdiaDeck", TURNBACK_SCRIPT]
 LAUNCH_ARGS["deck-surfaces"] = ["-ArdiaDeck", SURFACES_SCRIPT]
@@ -903,6 +932,7 @@ def verdict(report):
         "misordered": (p.get("misordered"), TARGETS["misordered"]),
         "ring_missing": (ring.get("missing"), TARGETS["ring_missing"]),
         "ring_show_ms": (ring.get("touch_up_to_show_ms"), TARGETS["ring_show_ms"]),
+        "wrong_submits": (report.get("submits", {}).get("wrong"), TARGETS["wrong_submits"]),
     }
     wanted = CHECKS.get(report.get("scenario"), DEFAULT_CHECKS)
     return {k: {"value": val, "target": tgt, "ok": val is not None and val <= tgt} for k, (val, tgt) in checks.items() if k in wanted}
@@ -924,6 +954,8 @@ def summarise(report):
         print(f"  {key}: {values}")
     if report.get("ring", {}).get("show"):
         print(f"  ring: {report['ring']}")
+    if report.get("submits"):
+        print(f"  submits: {report['submits']}")
     for slow in report.get("trace") or []:
         if isinstance(slow, dict) and slow.get("samples"):
             print(f"\n  -- main pass {slow['ms']} ms at {slow['at']} ({slow['samples']} samples)")
@@ -1016,6 +1048,7 @@ def analyse(args, directory=None, scenario=None):
     report = {"scenario": scenario or meta.get("scenario", "?"), "dir": directory,
               "video": analyse_video(os.path.join(directory, "video.mp4")), "probe": analyse_probe(events, t0)}
     report["ring"] = analyse_ring(events, report["scenario"])
+    report["submits"] = analyse_submits(events, report["scenario"])
     report["verdict"] = verdict(report)
     report["trace"] = analyse_trace(directory, events, t0)
     json.dump(report, open(os.path.join(directory, "report.json"), "w"), indent=2)

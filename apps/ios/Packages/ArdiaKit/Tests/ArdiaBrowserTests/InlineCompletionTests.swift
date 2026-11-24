@@ -131,4 +131,17 @@ struct InlineCompletionTests {
     let external6 = echo.isExternal("gi", current: "github")
     #expect(external6)
   }
+
+  @Test("The synced value re-delivered after newer pushes is a stale echo, not an outside edit")
+  func echoFilterStaleSyncedValue() {
+    var echo = BindingEchoFilter()
+    let synced = echo.isExternal("http://127.0.0.1:", current: "http://127.0.0.1:")
+    #expect(!synced)
+    echo.pushed("http://127.0.0.1:8")
+    echo.pushed("http://127.0.0.1:8777/b.html")
+    let stale = echo.isExternal("http://127.0.0.1:", current: "http://127.0.0.1:8777/b.html")
+    #expect(!stale)
+    let outside = echo.isExternal("example.com", current: "http://127.0.0.1:8777/b.html")
+    #expect(outside)
+  }
 }

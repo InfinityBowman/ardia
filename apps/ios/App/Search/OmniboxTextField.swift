@@ -90,15 +90,38 @@ struct OmniboxTextField: UIViewRepresentable {
     }
 
     private func push(_ field: CompletingTextField) {
+      guard !field.isApplyingCompletion else {
+        echo.pushed(field.editor.typed)
+        DispatchQueue.main.async { [weak self, weak field] in
+          guard let self, let field, !field.isApplyingCompletion else { return }
+          self.push(field)
+        }
+        return
+      }
       let value = field.editor.typed
       echo.pushed(value)
       parent.text = value
     }
 
     @objc func editingChanged(_ field: CompletingTextField) {
-      guard field.markedTextRange == nil, !field.isApplyingCompletion else { return }
+      guard field.markedTextRange == nil else { return }
+      if field.isApplyingCompletion {
+        if adoptVisibleText(field) { push(field) }
+        return
+      }
       field.editor.syncTyped(field.text ?? "")
       push(field)
+    }
+
+    private func adoptVisibleText(_ field: CompletingTextField) -> Bool {
+      let visible = field.text ?? ""
+      guard visible != field.editor.display else { return false }
+      if visible == field.editor.typed {
+        field.editor.dropSuffix()
+      } else {
+        field.editor.syncTyped(visible)
+      }
+      return true
     }
 
     func offer(_ offer: CompletionOffer?, to field: CompletingTextField) {
@@ -143,6 +166,7 @@ struct OmniboxTextField: UIViewRepresentable {
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
       guard let field = textField as? CompletingTextField else { return true }
+      if field.markedTextRange == nil, adoptVisibleText(field) { push(field) }
       let submitted = field.editor.display
       guard !submitted.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
       parent.onSubmit(submitted)
@@ -159,6 +183,10 @@ struct OmniboxTextField: UIViewRepresentable {
 
     func textFieldDidChangeSelection(_ textField: UITextField) {
       guard let field = textField as? CompletingTextField, field.editor.hasSuffix, !field.isApplyingCompletion, !field.isCaretAtTypedEnd else { return }
+      if field.markedTextRange == nil, adoptVisibleText(field) {
+        push(field)
+        return
+      }
       field.editor.accept()
       field.showAccepted()
       push(field)
@@ -187,6 +215,7 @@ final class CompletingTextField: UITextField {
   var wantsFocus = false
   var typedLength: Int { (editor.typed as NSString).length }
   static let horizontalInset: CGFloat = 3
+  private static let settlePasses = 4
   private static let composingLanguages = ["ja", "zh", "ko"]
 
   override func didMoveToWindow() {
@@ -226,34 +255,42 @@ final class CompletingTextField: UITextField {
 
   func reset(to value: String) {
     editor.reset(to: value)
-    isApplyingCompletion = true
-    defer { isApplyingCompletion = false }
-    text = value
+    settle { text = editor.typed }
   }
 
   func render() {
-    isApplyingCompletion = true
-    defer { isApplyingCompletion = false }
-    if editor.hasSuffix {
-      var attributes = defaultTextAttributes
-      let attributed = NSMutableAttributedString(string: editor.typed, attributes: attributes)
-      attributes[.backgroundColor] = completionColor
-      attributed.append(NSAttributedString(string: editor.suffix, attributes: attributes))
-      attributedText = attributed
-    } else if text != editor.typed || attributedText?.length != typedLength || hasCompletionStyling {
-      text = editor.typed
-    }
-    if let caret = position(from: beginningOfDocument, offset: typedLength) {
-      selectedTextRange = textRange(from: caret, to: caret)
+    settle {
+      if editor.hasSuffix {
+        var attributes = defaultTextAttributes
+        let attributed = NSMutableAttributedString(string: editor.typed, attributes: attributes)
+        attributes[.backgroundColor] = completionColor
+        attributed.append(NSAttributedString(string: editor.suffix, attributes: attributes))
+        attributedText = attributed
+      } else if text != editor.typed || attributedText?.length != typedLength || hasCompletionStyling {
+        text = editor.typed
+      }
+      if let caret = position(from: beginningOfDocument, offset: typedLength) {
+        selectedTextRange = textRange(from: caret, to: caret)
+      }
     }
   }
 
   func showAccepted() {
+    let selection = selectedTextRange
+    settle {
+      text = editor.typed
+      if let selection { selectedTextRange = selection }
+    }
+  }
+
+  private func settle(_ apply: () -> Void) {
     isApplyingCompletion = true
     defer { isApplyingCompletion = false }
-    let selection = selectedTextRange
-    text = editor.typed
-    if let selection { selectedTextRange = selection }
+    for _ in 0..<Self.settlePasses {
+      let shown = editor
+      apply()
+      if editor == shown { return }
+    }
   }
 
   private var hasCompletionStyling: Bool {
