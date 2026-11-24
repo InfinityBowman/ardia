@@ -144,8 +144,8 @@ final class FakeMac {
     return try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] ?? [:]
   }
 
-  func scopeFolder(_ scope: String) -> URL {
-    vault.chainURL.appendingPathComponent(keys.scopeTag(scope), isDirectory: true)
+  func scopeFolder(_ scope: String) throws -> URL {
+    vault.chainURL.appendingPathComponent(try keys.scopeTag(scope), isDirectory: true)
   }
 
   func logs(_ scope: String, device: String) -> [(seq: Int, json: String)] {

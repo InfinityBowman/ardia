@@ -88,7 +88,7 @@ import Testing
     try pair.mac.put(Self.scope, "bm:late", #"{"k":"u","p":"bar","t":"Late","u":"https://late.example/","a":2,"pos":"2"}"#)
     try pair.mac.sync([Self.scope])
     pair.cloud.deliverEverything()
-    let scopeDirectory = pair.mac.scopeFolder(Self.scope).path.replacingOccurrences(of: pair.cloud.macFolder.path + "/", with: "")
+    let scopeDirectory = try pair.mac.scopeFolder(Self.scope).path.replacingOccurrences(of: pair.cloud.macFolder.path + "/", with: "")
     try pair.cloud.makeConflictCopies(in: scopeDirectory)
     let chainDirectory = (scopeDirectory as NSString).deletingLastPathComponent
     try FileManager.default.copyItem(

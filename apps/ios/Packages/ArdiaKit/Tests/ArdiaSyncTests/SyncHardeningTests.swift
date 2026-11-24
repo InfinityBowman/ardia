@@ -125,7 +125,7 @@ import Testing
   @Test func aCoordinatedReadThatNeverFinishesEndsTheCycleAsOffline() async throws {
     let j = try await joined(timeout: 0.3)
     defer { j.sandbox.remove() }
-    let scopeFolder = j.mac.scopeFolder(Self.scope)
+    let scopeFolder = try j.mac.scopeFolder(Self.scope)
     let held = DispatchSemaphore(value: 0)
     let release = DispatchSemaphore(value: 0)
     Thread.detachNewThread {

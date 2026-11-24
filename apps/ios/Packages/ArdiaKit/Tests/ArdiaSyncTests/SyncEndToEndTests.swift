@@ -176,7 +176,7 @@ import Testing
     #expect(await service.connect(phrase: RecoveryPhrase.words(for: entropy).joined(separator: " "), folder: sandbox.folder) == .connected)
     await service.syncNow()
 
-    let scopeFolder = mac.scopeFolder(Self.scope)
+    let scopeFolder = try mac.scopeFolder(Self.scope)
     let before = Set(sandbox.contents(scopeFolder))
     try mac.put(Self.scope, "bm:late", #"{"k":"u","p":"other","t":"Late","u":"https://late.example/","a":3,"pos":"5"}"#)
     try mac.sync([Self.scope])
@@ -209,7 +209,7 @@ import Testing
     let me = try #require(first.snapshot.devices.first { $0.isCurrent }).id
     first.appWillResignActive()
 
-    let scopeFolder = mac.scopeFolder(Self.scope)
+    let scopeFolder = try mac.scopeFolder(Self.scope)
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: scopeFolder.path)
     source.tabs.append(LocalTabRecord(url: "https://two.example/", title: "Two", lastActive: .now, profileSyncId: nil))
     await first.syncNow()
