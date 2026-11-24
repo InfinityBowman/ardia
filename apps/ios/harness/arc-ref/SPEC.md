@@ -1001,3 +1001,63 @@ offset tracked per frame against the resting page (±2 pt, ±1 frame).
   and the same reveal, advance, fill and fade as before. The page menu panel and the search tray cover
   it while they're up. The iPad column and wide layouts keep the line at the top of the page, since
   their bar isn't at the bottom.
+
+### 6.12 Page-load timing (2026-11-23; Arc on the iPad, Ardia and Safari on the "Ardia Harness" simulator)
+
+**Method.** The same three URLs on both devices, on the same Wi-Fi (the iPad runs a VPN):
+`bbc.com/news` (news), `docs.python.org/3/library/asyncio-task.html` (docs) and `airbnb.com` (heavy JS).
+Each was opened from the search panel (tap +, type the URL, Return). *Cold* means the first visit with the
+app's WebKit caches deleted, or for Arc the first visit ever on that iPad. *Warm* means the same URL again
+right after. Times run from the AXe Return command, and *first paint* is the first frame where any page
+content shows, read by eye from frame grids. Rigs: iPad, `axe stream-video` h264 at 60 fps (±17 ms), with
+Return → panel starting to move at 110–125 ms. Simulator, `axe stream-video` mjpeg at 12–18 fps (±70 ms),
+with Return → panel moving at 210–320 ms, so simulator numbers carry ~150 ms more rig latency than the
+iPad's. The Ardia app could not be installed on the iPad (its provisioning profiles don't include that
+device), so Safari on the simulator is the same-device control. Raw runs: `runs/load/` (git-ignored).
+
+| First paint (cold / warm) | Arc, iPad | Ardia before, sim | Ardia after, sim | Safari, sim |
+|---|---|---|---|---|
+| BBC News | 474 / 550 ms | 2300 / 2200 ms | 500 / 550 ms | 600 / 500 ms |
+| Python docs | 540 / ~300 ms | 2200 / 2150 ms | 800 / 700 ms | 600 / 450 ms |
+| Airbnb | 843 / 675 ms | 2750 / 2750 ms | 1000 / 900 ms | 2100 / 2500 ms |
+
+The Python warm run of the fixed build landed on the docs index (the omnibox resolved the typed URL to a
+history entry). Arc's visually complete times (frame ≥ 95 % like the settled page): BBC 998 / 743, Python
+672 / 677, Airbnb 1734 / 1270 ms.
+
+**Where Ardia's time went** (in-app trace, Return → event, BBC cold / warm):
+
+| Event | Before | After |
+|---|---|---|
+| web view ready | 16 ms (new process launching) | 9 / 8 ms (spare adopted) |
+| navigation-action policy asked | 377 / 331 ms | 50 / 36 ms |
+| `didStartProvisionalNavigation` | 1734 / 1717 ms | 58 / 44 ms |
+| commit | 1777 / 1760 ms | 124 / 52 ms |
+| cover lifted | 1987 / 1955 ms | at first paint + one presented frame |
+| `didFinish` | 2413 / 1954 ms | 591 / 227 ms |
+
+- **A cold WebContent process per new tab.** Each tab made its WKWebView at the moment of the search,
+  so WebKit launched a new web process: ~320 ms to launch, then ~1.3 s initialising before the process
+  acted on the policy answer the app had already given (WebKit log: "Got policyAction Use from async IPC"
+  1.26 s after "Client responded"). The network itself took 25–40 ms from didStart to response. The
+  content blocker and the page scripts were ruled out (both off: same gap). Safari avoids this with a
+  prewarmed process. Ardia now keeps one spare WKWebView, created 350 ms after the search panel opens and
+  refilled 1 s after a page finishes loading. A new tab (or a restored one) adopts it, and the blocker
+  and page scripts are installed on adoption. The spare is dropped on a memory warning and when private
+  browsing ends, and a private spare is only made in Incognito.
+- **The placeholder hid incremental paint.** A new tab kept its placeholder card until the content grew
+  taller than the viewport, then waited 150 ms and a snapshot round trip. BBC's first layout is 735 pt
+  tall (shorter than the 874 pt viewport), so it waited for the load to finish. The cover now lifts at
+  the first layout after the navigation commits, after one presented frame. No white flash in dark mode
+  (60 fps `simctl` recordings; the brightest frames are the outgoing page under the closing panel).
+- **Reload** was not slow. Ardia's menu reload paints the new document about 200–300 ms after the
+  menu clears, the same before and after (BBC ≈ 0.8–0.9 s and Airbnb skeleton ≈ 0.7 s from the tap, with
+  ~0.55 s of that simulator rig latency). Arc on the iPad: BBC ≈ 0.5–0.6 s, Airbnb skeleton ≈ 1.8 s,
+  content ≈ 2.4 s. Arc keeps the page menu open after a reload.
+- **Pull to refresh:** Arc's spinner clears about 1.0 s after the pull starts, before the reloaded page
+  even paints. Ardia held its spinner until the load finished (4–6 s on Airbnb), and now ends it when the
+  reload commits. AXe pulls overscroll Ardia's page on the simulator but never fire its refresh control,
+  in the old build or the new one, so this one still needs a check by hand.
+- Ruled out: `ProgressThrottle` only throttles the published value. Omnibox resolution before `load()`
+  takes < 10 ms. Content-rule lists are applied synchronously, with no wait on compilation. Night Shade
+  and the blocking scripts don't block. The main thread was idle during the gap.
