@@ -196,9 +196,9 @@ public final class WebTab: DiscardablePage, Identifiable {
   public func makeLive() {
     guard webView == nil, let engine, popupConfiguration != nil || engine.canMakeWebViews() else { return }
     let isPopup = popupConfiguration != nil
-    let configuration = popupConfiguration ?? Self.makeConfiguration(dataStore: isPrivate ? engine.privateDataStore() : .default())
+    let webView = popupConfiguration.map { FindReportingWebView(frame: .zero, configuration: $0) } ?? engine.takeWebView(isPrivate: isPrivate)
     popupConfiguration = nil
-    let webView = FindReportingWebView(frame: .zero, configuration: configuration)
+    let configuration = webView.configuration
     webView.onFindSessionChange = { [weak self] active in self?.isFindingInPage = active }
     let coordinator = WebTabCoordinator(tab: self)
     self.coordinator = coordinator
@@ -441,6 +441,7 @@ public final class WebTab: DiscardablePage, Identifiable {
 
   fileprivate func didFinish() {
     crashReloads = 0
+    engine?.pageDidFinishLoading(isPrivate: isPrivate)
     fetchFavicon()
     scheduleSnapshot()
   }

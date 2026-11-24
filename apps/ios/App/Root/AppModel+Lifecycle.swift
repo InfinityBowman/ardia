@@ -5,6 +5,8 @@ import Observation
 import UIKit
 
 extension AppModel {
+  static let prewarmDelay: Duration = .milliseconds(350)
+
   func connectServices() {
     sync.source = tabs
     web.omnibox = omnibox
@@ -14,6 +16,13 @@ extension AppModel {
     tabs.onLocalChange = { [weak self] in self?.sync.localDidChange() }
     web.openExternalURL = { url in UIApplication.shared.open(url) }
     web.canMakeWebViews = { PageWindows.exist }
+    browse.onSearchPresented = { [weak self] in
+      Task { @MainActor [weak self] in
+        try? await Task.sleep(for: Self.prewarmDelay)
+        guard let self, browse.search != nil else { return }
+        web.prewarm(isPrivate: isIncognito)
+      }
+    }
     web.openUniversalLink = { url in
       await UIApplication.shared.open(url, options: [.universalLinksOnly: true])
     }

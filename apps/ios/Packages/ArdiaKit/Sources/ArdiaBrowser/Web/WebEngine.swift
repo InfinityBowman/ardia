@@ -26,6 +26,15 @@ public final class WebEngine {
   @ObservationIgnored public var omnibox: Omnibox?
   @ObservationIgnored private let pageScriptControllers = NSHashTable<WKUserContentController>.weakObjects()
   @ObservationIgnored private var sharedPrivateDataStore: WKWebsiteDataStore?
+  @ObservationIgnored private var spare: SpareWebView?
+  @ObservationIgnored private var refillTask: Task<Void, Never>?
+
+  struct SpareWebView {
+    let webView: FindReportingWebView
+    let isPrivate: Bool
+  }
+
+  static let refillDelay: Duration = .seconds(1)
 
   public let preferences: BrowsingPreferences
 
@@ -122,7 +131,42 @@ public final class WebEngine {
     }
   }
 
+  public func prewarm(isPrivate: Bool = false) {
+    refillTask?.cancel()
+    refillTask = nil
+    guard spare?.isPrivate != isPrivate, canMakeWebViews() else { return }
+    spare = SpareWebView(webView: makeWebView(isPrivate: isPrivate), isPrivate: isPrivate)
+  }
+
+  func takeWebView(isPrivate: Bool) -> FindReportingWebView {
+    guard let spare, spare.isPrivate == isPrivate else { return makeWebView(isPrivate: isPrivate) }
+    self.spare = nil
+    return spare.webView
+  }
+
+  func pageDidFinishLoading(isPrivate: Bool) {
+    guard spare == nil, refillTask == nil else { return }
+    refillTask = Task { [weak self] in
+      try? await Task.sleep(for: Self.refillDelay)
+      guard let self, !Task.isCancelled else { return }
+      refillTask = nil
+      guard UIApplication.shared.applicationState != .background else { return }
+      prewarm(isPrivate: isPrivate)
+    }
+  }
+
+  private func dropSpare() {
+    refillTask?.cancel()
+    refillTask = nil
+    spare = nil
+  }
+
+  private func makeWebView(isPrivate: Bool) -> FindReportingWebView {
+    FindReportingWebView(frame: .zero, configuration: WebTab.makeConfiguration(dataStore: isPrivate ? privateDataStore() : .default()))
+  }
+
   private func endPrivateBrowsing() {
+    if spare?.isPrivate == true { dropSpare() }
     preferences.endPrivateBrowsing()
     blocker.settings.endPrivateBrowsing()
     guard let store = sharedPrivateDataStore else { return }
@@ -145,6 +189,7 @@ public final class WebEngine {
   }
 
   public func discardBackgroundTabs() {
+    dropSpare()
     roster.discardAll(except: tabs.selectedTabID)
   }
 

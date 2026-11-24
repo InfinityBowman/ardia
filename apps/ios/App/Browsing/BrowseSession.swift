@@ -37,6 +37,7 @@ final class BrowseSession {
   }
 
   @ObservationIgnored let covers = PageCoverCache()
+  @ObservationIgnored var onSearchPresented: (() -> Void)?
   @ObservationIgnored private(set) var frozenOrder: [UUID]?
   @ObservationIgnored private var unfreezeTask: Task<Void, Never>?
   static let orderFreeze: Duration = .seconds(4)
@@ -48,6 +49,7 @@ final class BrowseSession {
     let request = SearchRequest(origin: origin, initialText: text, selectsAll: selectsAll, incognitoOnCancel: incognitoOnCancel)
     search = request
     SearchMotion.begin(request)
+    onSearchPresented?()
   }
 
   func freezeOrder(_ ids: [UUID]) {
