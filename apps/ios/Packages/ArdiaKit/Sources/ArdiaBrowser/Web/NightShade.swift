@@ -3,6 +3,16 @@ import Foundation
 enum PageScripts {
   static let handlerName = "ardiaPage"
 
+  static let readiness = #"""
+  (() => {
+    const post = () => {
+      try { window.webkit.messageHandlers.ardiaPage.postMessage({ type: "ready" }).catch(() => {}); } catch (e) {}
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", post, { once: true });
+    else post();
+  })();
+  """#
+
   static let nightShade = #"""
   (() => {
     if (window.__ardiaNightShade) return;

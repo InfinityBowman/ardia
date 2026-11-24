@@ -179,6 +179,15 @@ public final class WebEngine {
     pageScriptControllers.add(controller)
     controller.addScriptMessageHandler(PageMessageProxy(engine: self), contentWorld: ReadableContent.world, name: PageScripts.handlerName)
     controller.addUserScript(WKUserScript(source: PageScripts.nightShade, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: ReadableContent.world))
+    controller.addUserScript(WKUserScript(source: PageScripts.readiness, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: ReadableContent.world))
+  }
+
+  func documentBecameReady(in webView: WKWebView) {
+    for id in roster.liveIDs {
+      guard let page = roster.page(id), page.webView === webView else { continue }
+      page.documentBecameReady()
+      return
+    }
   }
 
   private func broadcastNightShade() {
@@ -228,8 +237,16 @@ final class PageMessageProxy: NSObject, WKScriptMessageHandlerWithReply {
   }
 
   func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) async -> (Any?, String?) {
-    guard let engine, let body = message.body as? [String: Any], body["type"] as? String == "nightShade" else { return (nil, nil) }
-    return (engine.preferences.nightShade(for: message.webView?.url?.host(), isPrivate: message.isFromPrivatePage).rawValue, nil)
+    guard let engine, let body = message.body as? [String: Any] else { return (nil, nil) }
+    switch body["type"] as? String {
+    case "nightShade":
+      return (engine.preferences.nightShade(for: message.webView?.url?.host(), isPrivate: message.isFromPrivatePage).rawValue, nil)
+    case "ready":
+      if message.frameInfo.isMainFrame, let webView = message.webView { engine.documentBecameReady(in: webView) }
+      return (nil, nil)
+    default:
+      return (nil, nil)
+    }
   }
 }
 #endif

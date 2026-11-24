@@ -296,7 +296,7 @@ struct BrowsingView: View {
   @ViewBuilder
   private var loadingLine: some View {
     if let page = currentWebPage {
-      LoadingLine(progress: MotionDemo.loadFreeze ?? page.progress, isLoading: MotionDemo.loadFreeze != nil || page.isLoading)
+      LoadingLine(progress: MotionDemo.loadFreeze ?? page.progress, isLoading: MotionDemo.loadFreeze != nil || page.isShowingLoad)
         .id(page.id)
     }
   }

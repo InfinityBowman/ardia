@@ -37,10 +37,12 @@ public final class WebTab: DiscardablePage, Identifiable {
   public private(set) var failure: PageLoadFailure?
   public private(set) var pageZoom = 1.0
   public private(set) var isFindingInPage = false
+  public private(set) var isContentReady = false
   public var request: PageRequest?
   public let blockedResources = BlockedResourceCounter()
 
   public var isLive: Bool { webView != nil }
+  public var isShowingLoad: Bool { isLoading && !isContentReady }
   public let isPrivate: Bool
   public var host: String? { url.flatMap { BrowserURL.host(of: $0.absoluteString) } }
 
@@ -300,6 +302,7 @@ public final class WebTab: DiscardablePage, Identifiable {
       if let value = tab.progressThrottle.offer(view.estimatedProgress, at: .now) { tab.progress = value }
     }
     watch(\.isLoading) { tab, view in
+      if view.isLoading, !tab.isLoading, tab.isContentReady { tab.isContentReady = false }
       if tab.isLoading != view.isLoading { tab.isLoading = view.isLoading }
       if !view.isLoading {
         tab.progressThrottle.reset()
@@ -399,6 +402,7 @@ public final class WebTab: DiscardablePage, Identifiable {
 
   fileprivate func didStartNavigation() {
     isProvisional = true
+    if isContentReady { isContentReady = false }
     failure = nil
   }
 
@@ -445,8 +449,14 @@ public final class WebTab: DiscardablePage, Identifiable {
     lastVisit = engine.tabs.recordVisit(url: committed, title: webView?.title ?? "", transition: transition, fromTab: id)
   }
 
+  func documentBecameReady() {
+    guard committedNavigations > 0, !isProvisional, !isContentReady else { return }
+    isContentReady = true
+  }
+
   fileprivate func didFinish() {
     crashReloads = 0
+    if !isContentReady { isContentReady = true }
     engine?.pageDidFinishLoading(isPrivate: isPrivate)
     fetchFavicon()
     scheduleSnapshot()

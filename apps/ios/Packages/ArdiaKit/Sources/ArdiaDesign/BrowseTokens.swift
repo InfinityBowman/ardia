@@ -144,9 +144,10 @@ public extension Motion {
   static let barCollapse = Animation.spring(duration: 0.4, bounce: 0)
   static let progressReveal = Animation.easeOut(duration: 0.2)
   static let progressAdvance = Animation.easeOut(duration: 0.45)
-  static let progressFill = Animation.easeOut(duration: 0.2)
-  static let progressFade = Animation.easeOut(duration: 0.25)
-  static let progressRevealDelay: Duration = .milliseconds(150)
+  static let progressFill = Animation.easeOut(duration: 0.5)
+  static let progressHold: Double = 0.3
+  static let progressFade = Animation.easeOut(duration: 0.35)
+  static let progressRevealDelay: Duration = .zero
   static let placeholderDelay: Duration = .milliseconds(300)
   static let placeholderIn = Animation.easeOut(duration: 0.22)
   static let pagerCommit = Spring(response: 0.24, dampingRatio: 1)

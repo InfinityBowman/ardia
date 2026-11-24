@@ -66,7 +66,7 @@ struct LoadingLine: View {
     withAnimation(Motion.progressFill) {
       track.finish()
     } completion: {
-      withAnimation(Motion.progressFade) {
+      withAnimation(Motion.progressFade.delay(Motion.progressHold)) {
         track.fade()
       } completion: {
         track.settle()
