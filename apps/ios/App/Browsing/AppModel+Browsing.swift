@@ -85,6 +85,17 @@ extension AppModel {
     web.share(url)
   }
 
+  func prepareShareFromMenu(_ tabID: UUID) -> Bool {
+    guard let tab = tabs.tab(tabID), let url = URL(string: tab.url), BrowserURL.isSyncable(tab.url) else { return false }
+    let title = tab.title
+    SharePresenter.shared.expect()
+    Task {
+      let clean = await web.omnibox?.cleanURL(url) ?? url
+      SharePresenter.shared.prepare(clean, title: title, holdsUntilRelease: true)
+    }
+    return true
+  }
+
   func pinToMac(_ tabID: UUID) {
     guard let tab = tabs.tab(tabID) else { return }
     guard sync.isEnabled else {

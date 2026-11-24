@@ -7,6 +7,7 @@ enum PageMenuFollowUp: Equatable {
   case sheet(AppModel.Sheet)
   case siteSettings
   case downloadVideo
+  case share
 }
 
 extension AppModel {
@@ -23,6 +24,8 @@ extension AppModel {
       sheet = .settings
     case .downloadVideo:
       downloadVideo(from: tabID)
+    case .share:
+      SharePresenter.shared.release()
     }
   }
 

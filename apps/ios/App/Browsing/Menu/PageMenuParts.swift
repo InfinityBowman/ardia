@@ -37,6 +37,7 @@ enum PageMenuLayout {
   static let ridersArrive = Animation.easeOut(duration: 0.05)
   static let ridersLeave = Animation.easeIn(duration: 0.05).delay(0.025)
   static let dimClear = Animation.easeOut(duration: 0.08)
+  static let shareAfterClose: TimeInterval = 0.11
   static let prewarmDelay: Duration = .seconds(1.5)
   static let expand = Animation.spring(response: 0.25, dampingFraction: 1)
   static let rowsAppear = Animation.easeOut(duration: 0.2)

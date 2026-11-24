@@ -1110,3 +1110,20 @@ Times run from the first frame that moves.
 - The swipe still lifts its picture once the web view reports the destination and a presentation update
   has gone through. A page that redraws later than that on popstate shows its old content under the last
   ≈ 0.1 s of the fade.
+
+### 6.12 Share from the page menu (iPhone owner recording, 60 fps)
+
+- **Arc:** tapping Share first closes the menu back into the bar, then presents the system share sheet
+  directly, not inside a sheet of its own. The menu starts moving on the tap frame. The share card's first
+  frame is ≈ 0.25 s later, and it's full size ≈ 0.41 s after the tap. iOS draws it as a floating card,
+  9 pt from each side and ending ≈ 98 pt above the screen bottom, above the bar. It scales up around its
+  own centre, and its contact and app rows are filled from its first frame. On dismissal it shrinks back
+  around its centre and fades in ≈ 0.18 s, leaving the page and bar with the menu still closed.
+- **Ardia before:** the menu vanished in one frame and the share sheet was already at full size in the
+  next. It was a SwiftUI sheet wrapping the activity controller, with medium and large detents. On the
+  device its rows showed grey placeholder circles for ≈ 0.17 s. It left by sliding down in ≈ 0.35 s.
+- **Ardia now** (harness simulator): Share builds the activity controller at once (a link source with
+  `LPLinkMetadata`, the title and the cleaned URL), closes the menu, and presents the controller with
+  UIKit 0.11 s later. First frame ≈ 0.22 s after the tap, full size ≈ 0.39 s. It's the same floating card
+  as Arc's, scaling around its centre, and dismissal shrinks it in 0.18 s. The iPad sheet menu presents
+  it after its own dismissal finishes.

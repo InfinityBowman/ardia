@@ -70,11 +70,10 @@ struct BrowsingView: View {
         ToolbarSheet(tabID: id)
       }
     }
-    .sheet(item: Binding(get: { app.web.shareRequest }, set: { app.web.shareRequest = $0 })) { url in
-      ActivitySheet(url: url)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.hidden)
-        .ignoresSafeArea()
+    .onChange(of: app.web.shareRequest) { _, url in
+      guard let url else { return }
+      app.web.shareRequest = nil
+      SharePresenter.shared.prepare(url, title: app.tabs.selectedTab?.title, holdsUntilRelease: false)
     }
     .fullScreenCover(item: Binding(get: { browse.readerTabID.map(ReaderTarget.init) }, set: { browse.readerTabID = $0?.id })) { target in
       ReaderView(tabID: target.id)

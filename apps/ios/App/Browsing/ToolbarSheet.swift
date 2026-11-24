@@ -294,8 +294,10 @@ struct ToolbarSheet: View {
       }
       Spacer(minLength: 0)
       actionButton("square.and.arrow.up", label: "Share") {
+        guard let tabID, app.prepareShareFromMenu(tabID) else { return leave() }
+        guard panelMaxHeight != nil else { return close(then: .share) }
         leave()
-        if let tabID { app.sharePage(tabID) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + PageMenuLayout.shareAfterClose) { SharePresenter.shared.release() }
       }
     }
   }
