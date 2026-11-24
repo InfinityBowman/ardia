@@ -35,7 +35,7 @@ struct WebPageView: UIViewRepresentable {
     }
     view.placeholderTab = tab
     view.show(page, cover: cover, isLoading: page.isLoading, progress: page.progress, isLive: page.webView != nil)
-    if !page.isLoading { view.endRefreshing() }
+    view.endRefreshingIfReloaded(isLoading: page.isLoading)
   }
 
   static func dismantleUIView(_ view: PageContainerView, coordinator: ()) {
@@ -82,6 +82,7 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   private let coverView = UIImageView()
   private var reveal: Reveal = .none
   private var revealPending = false
+  private var refreshCommitBaseline: Int?
   private var revealDeadline: Task<Void, Never>?
   private var layoutObservation: NSKeyValueObservation?
   private var scrollObservation: NSKeyValueObservation?
@@ -446,7 +447,18 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
   }
 
   func endRefreshing() {
+    refreshCommitBaseline = nil
     if refreshControl.isRefreshing { refreshControl.endRefreshing() }
+  }
+
+  func endRefreshingIfReloaded(isLoading: Bool) {
+    guard refreshControl.isRefreshing else { return }
+    if !isLoading {
+      endRefreshing()
+    } else if let refreshCommitBaseline, let page, page.committedNavigations > refreshCommitBaseline {
+      HarnessProbe.mark("refresh.committed")
+      endRefreshing()
+    }
   }
 
   override func safeAreaInsetsDidChange() {
@@ -470,7 +482,9 @@ final class PageContainerView: UIView, UIGestureRecognizerDelegate {
 
   @objc private func refreshPulled() {
     guard let page else { return endRefreshing() }
+    HarnessProbe.mark("refresh.pull")
     refreshFeedback.impactOccurred()
+    refreshCommitBaseline = page.committedNavigations
     page.reload()
     Task { @MainActor [weak self] in
       try? await Task.sleep(for: .seconds(8))
