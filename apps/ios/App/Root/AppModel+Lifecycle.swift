@@ -38,7 +38,11 @@ extension AppModel {
       sync.start()
       Task { await blocker.prepare() }
     }
-    surface = .search
+    if !isDemo, let lastTab = tabs.selectedTab, !lastTab.isPrivate {
+      openTab(lastTab.id)
+    } else {
+      surface = .search
+    }
     if isDemo { DemoScenario.apply(to: self) }
   }
 
