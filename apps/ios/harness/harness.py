@@ -104,7 +104,7 @@ def build(args):
     with open(log, "w") as out:
         code = subprocess.call(["xcodebuild", "-project", PROJECT, "-scheme", "Ardia", "-configuration", "Release",
                                 "-destination", f"id={sim}", "-derivedDataPath", DERIVED,
-                                "COMPILER_INDEX_STORE_ENABLE=NO", "-quiet", "build"], stdout=out, stderr=subprocess.STDOUT)
+                                "COMPILER_INDEX_STORE_ENABLE=NO", "ONLY_ACTIVE_ARCH=YES", "-quiet", "build"], stdout=out, stderr=subprocess.STDOUT)
     errors = [l for l in open(log) if ": error:" in l]
     if code != 0 or "BUILD FAILED" in open(log).read():
         print("".join(sorted(set(errors))[:20]) or open(log).read()[-3000:])
