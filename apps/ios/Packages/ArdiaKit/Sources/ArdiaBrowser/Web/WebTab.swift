@@ -375,6 +375,10 @@ public final class WebTab: DiscardablePage, Identifiable {
     if !isMainFrame, let frame = action.targetFrame {
       noteVideoFrame(frame)
     }
+    if isMainFrame, action.targetFrame != nil, let hinted = colorSchemeHinted(action) {
+      webView?.load(hinted)
+      return .cancel
+    }
     if isMainFrame, action.targetFrame != nil {
       videoFrames = []
       pendingNavigationType = action.navigationType
@@ -390,6 +394,29 @@ public final class WebTab: DiscardablePage, Identifiable {
       }
     }
     return .allow
+  }
+
+  static let colorSchemeHint = "Sec-CH-Prefers-Color-Scheme"
+
+  static func wantsColorSchemeHint(_ host: String) -> Bool {
+    host.lowercased().wholeMatch(of: /(www\.)?google\.(com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})/) != nil
+  }
+
+  private func colorSchemeHinted(_ action: WKNavigationAction) -> URLRequest? {
+    let request = action.request
+    guard let webView, let url = request.url, let host = url.host(), url.scheme == "https" || url.scheme == "http",
+          (request.httpMethod ?? "GET") == "GET", request.httpBody == nil,
+          action.navigationType != .backForward, action.navigationType != .reload,
+          request.value(forHTTPHeaderField: Self.colorSchemeHint) == nil, Self.wantsColorSchemeHint(host) else { return nil }
+    var hinted = request
+    hinted.setValue(Self.interfaceStyle(of: webView) == .dark ? "dark" : "light", forHTTPHeaderField: Self.colorSchemeHint)
+    return hinted
+  }
+
+  static func interfaceStyle(of webView: WKWebView) -> UIUserInterfaceStyle {
+    if let window = webView.window { return window.traitCollection.userInterfaceStyle }
+    let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
+    return (windows.first(where: \.isKeyWindow) ?? windows.first)?.traitCollection.userInterfaceStyle ?? webView.traitCollection.userInterfaceStyle
   }
 
   fileprivate func decidePolicy(for response: WKNavigationResponse) -> WKNavigationResponsePolicy {
